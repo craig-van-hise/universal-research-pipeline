@@ -7,9 +7,8 @@ from pipeline_manager import run_full_pipeline
 from drive_manager import DriveManager
 from auth_manager import get_login_url, get_token_from_code, get_user_info
 
-# Page Config
 st.set_page_config(
-    page_title="Universal Research Librarian",
+    page_title="ScholarStack",
     page_icon="📚",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -113,7 +112,8 @@ if 'recent_topics' not in st.session_state:
 if 'temp_dir_to_cleanup' not in st.session_state:
     st.session_state.temp_dir_to_cleanup = None
 
-st.title("📚 Universal Research Librarian")
+st.title("📚 ScholarStack")
+st.caption("Your AI Research Librarian")
 
 # --- Success State ---
 if st.session_state.pipeline_run and st.session_state.zip_path and os.path.exists(st.session_state.zip_path):
@@ -175,8 +175,8 @@ with st.sidebar:
     
     # REVERTED: Back to standard text_input
     keywords = st.text_input(
-        "Additional Keywords", 
-        placeholder="e.g., diffusion, transformer",
+        "Additional Keywords (Comma-separated)", 
+        placeholder="e.g., crosstalk cancellation, binaural synthesis",
         key="keywords_input_std"
     )
 

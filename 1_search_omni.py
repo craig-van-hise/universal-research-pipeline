@@ -44,10 +44,35 @@ def get_session():
     session.mount('https://', adapter)
     return session
 
+def reconstruct_abstract(inverted_index):
+    """
+    Reconstructs the abstract from OpenAlex's inverted index format.
+    """
+    if not inverted_index:
+        return ""
+    
+    # Determine the length of the abstract based on the max index
+    max_index = 0
+    for positions in inverted_index.values():
+        if positions:
+            max_index = max(max_index, max(positions))
+    
+    words = [""] * (max_index + 1)
+    
+    # Populate the words at their correct positions
+    for word, positions in inverted_index.items():
+        for pos in positions:
+            words[pos] = word
+            
+    return " ".join(words)
+
 class ResearchCrawler:
     def __init__(self, topic, keywords, author, publication, date_start, date_end, count, sites, keyword_logic='any'):
         if os.path.exists("research_catalog.csv"):
-            os.remove("research_catalog.csv")
+            try:
+                os.remove("research_catalog.csv")
+            except OSError:
+                pass
 
         self.raw_topic = topic
         raw_keywords = [k.strip() for k in keywords.split(',')] if keywords else []
@@ -68,6 +93,7 @@ class ResearchCrawler:
         self.date_start = date_start
         self.date_end = date_end
         self.year_start = int(date_start[:4]) if date_start else 2000
+        self.year_end = int(date_end[:4]) if date_end else 2030
         
         self.final_target_count = int(count)
         self.target_count = int(self.final_target_count * 1.2) + 5
@@ -78,7 +104,8 @@ class ResearchCrawler:
         self.offsets = {
             'crossref': 0,
             'semantic': 0,
-            'arxiv': 0
+            'arxiv': 0,
+            'openalex': 0
         }
         
         # Use session for stability
@@ -174,8 +201,10 @@ class ResearchCrawler:
         if isinstance(status, bool) and not status:
              return False, "Date out of range"
         
-        if not self._contains_keywords(full_text):
-            return False, "Keywords missing"
+        # Disabled strict local keyword check because APIs (Crossref/S2) search full text/metadata 
+        # that we might not have locally (e.g. missing abstracts), causing false negatives.
+        # if not self._contains_keywords(full_text):
+        #    return False, "Keywords missing"
         
         norm_title = re.sub(r'[^a-z0-9]', '', str(title).lower())
         for existing in self.results:
@@ -239,7 +268,7 @@ class ResearchCrawler:
             'Original_Filename': self._parse_filename(c['final_url']),
             'Publication_Date': self._normalize_date(c['date']),
             'Category': 'Unsorted',
-            'Description': c['description'][:500] + "..." if c['description'] and len(c['description']) > 500 else c['description'],
+            'Description': c['description'][:2000] + "..." if c['description'] and len(c['description']) > 2000 else c['description'],
             'Is_Paywalled': False,
             'Is_Downloaded': False,
             'Source_URL': c['final_url'],
@@ -250,67 +279,157 @@ class ResearchCrawler:
         print(f"[Accepted] {entry['Title'][:60]}...", flush=True)
 
     def _check_accessibility(self, url, doi):
+        # Create a fresh, fast-fail session for validation checks
+        # We do NOT want retries here; if it hangs, we skip it.
+        check_session = requests.Session()
+        check_adapter = HTTPAdapter(max_retries=0) # NO retries
+        check_session.mount('http://', check_adapter)
+        check_session.mount('https://', check_adapter)
+
+        def is_valid_pdf_content(target_url):
+            try:
+                # stream=True to avoid downloading huge files if not PDF
+                # Use a specific user agent to avoid generic bot blocks
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                    'Range': 'bytes=0-1023' # Try to request just the header
+                }
+                # Fast timeout (2.5s), NO retries allowed by adapter
+                r = check_session.get(target_url, headers=headers, stream=True, timeout=2.5, allow_redirects=True)
+                
+                # Check 1: Status Code
+                if r.status_code not in [200, 206]:
+                    return False
+                
+                # Check 2: Content-Type (weak check, but good early filter)
+                ct = r.headers.get('Content-Type', '').lower()
+                if 'text/html' in ct: 
+                    return False
+                
+                # Check 3: Magic Bytes (Strongest Check)
+                # Read start of content
+                chunk = next(r.iter_content(chunk_size=1024), b'')
+                r.close() # Close connection explicitly
+                
+                if b'%PDF' in chunk:
+                    return True
+                
+                return False
+            except Exception:
+                return False
+            finally:
+                check_session.close()
+
         if url:
-            url_lower = url.lower()
-            if url_lower.endswith('.pdf'):
-                return True, url
-            if 'arxiv.org/pdf/' in url_lower:
-                return True, url
-            if 'openaccess' in url_lower:
+            if is_valid_pdf_content(url):
                 return True, url
 
         if doi:
             try:
-                print(f"DEBUG: Checking Unpywall for {doi}...", flush=True)
+                # Unpaywall is fast/reliable, can keep using main session
                 res = Unpywall.doi(doi)
-                print(f"DEBUG: Unpywall check done.", flush=True)
                 if res and res.best_oa_location and res.best_oa_location.url:
-                    return True, res.best_oa_location.url
+                    best_url = res.best_oa_location.url
+                    # But validate the Result URL with the fast checker
+                    if is_valid_pdf_content(best_url):
+                        return True, best_url
             except:
                 pass
         
         return False, url
 
-    def _add_result(self, title, authors, url, date, description, doi, source_name):
-        print(f"[Checking] {title[:60]}...", flush=True)
-        if not self._is_date_in_range(date):
-            print(f"[Rejected] Date out of range: {date}", flush=True)
-            return False
-
-        full_text = f"{title} {description}"
-        if not self._contains_keywords(full_text):
-            print(f"[Rejected] Keywords missing.", flush=True)
-            return False
-
-        norm_title = re.sub(r'[^a-z0-9]', '', str(title).lower())
-        for existing in self.results:
-            existing_norm = re.sub(r'[^a-z0-9]', '', str(existing['Title']).lower())
-            if existing_norm == norm_title:
-                print(f"[Rejected] Duplicate found.", flush=True)
-                return False
-
-        is_accessible, best_url = self._check_accessibility(url, doi)
+    def search_openalex(self):
+        base_url = "https://api.openalex.org/works"
         
-        if not is_accessible:
-            print(f"[Rejected] Not accessible/Paywalled.", flush=True)
-            return False
+        # Build filter string
+        filters = ["is_oa:true", "has_doi:true"]
+        if self.date_start:
+             filters.append(f"publication_year:>{self.year_start-1}")
+        if self.date_end:
+             filters.append(f"publication_year:<{self.year_end+1}")
+        
+        filter_str = ",".join(filters)
+        current_page = 1
+        per_page = 200 # Max allowed
+        
+        # Construct precision query: "Topic" AND ("Keyword1" OR "Keyword2")
+        topic_phrase = f'"{self.raw_topic}"'
+        search_query = topic_phrase
+        
+        if self.keywords_list:
+            # Quote each keyword phrase to ensure exact match (e.g. "crosstalk cancellation")
+            quoted_keywords = [f'"{k}"' for k in self.keywords_list]
+            
+            if self.keyword_logic == 'all':
+                # Topic AND "Key1" AND "Key2"...
+                joined_keywords = " AND ".join(quoted_keywords)
+                search_query = f'{topic_phrase} AND {joined_keywords}'
+            else:
+                # Default ANY: Topic AND ("Key1" OR "Key2"...)
+                joined_keywords = " OR ".join(quoted_keywords)
+                search_query = f'{topic_phrase} AND ({joined_keywords})'
 
-        entry = {
-            'Title': title.strip() if title else "Unknown Title",
-            'Authors': authors if authors else "Unknown Authors",
-            'Original_Filename': self._parse_filename(best_url),
-            'Publication_Date': self._normalize_date(date),
-            'Category': 'Unsorted',
-            'Description': description[:500] + "..." if description and len(description) > 500 else description,
-            'Is_Paywalled': False,
-            'Is_Downloaded': False,
-            'Source_URL': best_url,
-            'DOI': doi,
-            '_Source': source_name
-        }
-        self.results.append(entry)
-        print(f"[Accepted] +1", flush=True)
-        return True
+        print(f"📚 Querying OpenAlex for: '{search_query}'...", flush=True)
+
+        # Loop until GLOBAL result count hits target, so we truly fill the bucket
+        while len(self.results) < self.target_count:
+            params = {
+                "search": search_query,
+                "filter": filter_str,
+                "per-page": per_page,
+                "page": current_page,
+                "select": "title,id,publication_year,open_access,authorships,abstract_inverted_index,doi"
+            }
+
+            try:
+                resp = requests.get(base_url, params=params, timeout=10)
+                if resp.status_code != 200: 
+                    print(f"OpenAlex Error: {resp.status_code}")
+                    break
+                    
+                results = resp.json().get('results', [])
+                if not results: 
+                    print("OpenAlex: No more results.")
+                    break
+                    
+                batch_candidates = []
+                for item in results:
+                    pdf_url = item.get('open_access', {}).get('oa_url')
+                    if not pdf_url: continue # Should be caught by is_oa:true but safe check
+
+                    # Reconstruct abstract
+                    abstract_text = reconstruct_abstract(item.get('abstract_inverted_index'))
+
+                    # Get author
+                    authors_list = item.get('authorships', [])
+                    first_author = authors_list[0]['author']['display_name'] if authors_list else "Unknown"
+                    all_authors = ", ".join([a.get("author", {}).get("display_name", "") for a in authors_list])
+
+                    # Trust OpenAlex relevance since we included keywords in the query
+                    # Local keyword check removed to prevent false negatives (keywords in fulltext but not abstract)
+
+                    # Normalize keys for _process_batch
+                    batch_candidates.append({
+                        'title': item['title'],
+                        'authors': all_authors, 
+                        'date': str(item.get('publication_year', '')),
+                        'description': abstract_text,
+                        'doi': item.get('doi', '').replace("https://doi.org/", ""),
+                        'url': pdf_url, 
+                        'source_name': 'OpenAlex'
+                    })
+                
+                # Use the robust parallel processor which includes VALIDATION
+                self._process_batch(batch_candidates)
+
+                current_page += 1
+                if current_page > 50: # Safety break (check up to 10k papers)
+                    print("OpenAlex: Reached safety page limit (50). Stopping.")
+                    break
+                
+            except Exception as e:
+                print(f"Error searching OpenAlex: {e}", flush=True)
+                break
 
     def search_arxiv(self):
         if self.offsets['arxiv'] > 0:
@@ -319,21 +438,16 @@ class ResearchCrawler:
         print(f"Searching ArXiv...", flush=True)
         try:
             if self.keywords_list:
-                # User requested Topic AND Keywords
-                # Split phrases into individual terms for ArXiv to improve recall
-                # e.g. "crosstalk cancellation" -> all:crosstalk AND all:cancellation
                 kw_parts = []
                 for k in self.keywords_list:
                     words = k.split()
                     if len(words) > 1:
-                        # (all:word1 AND all:word2)
                         sub_query = " AND ".join([f'all:"{w}"' for w in words])
                         kw_parts.append(f"({sub_query})")
                     else:
                         kw_parts.append(f'all:"{k}"')
                 
                 kw_group = " OR ".join(kw_parts)
-                # If Logic is ALL, use AND instead of OR
                 if self.keyword_logic == 'all':
                     kw_group = " AND ".join(kw_parts)
                 
@@ -371,7 +485,6 @@ class ResearchCrawler:
                 })
             
             self._process_batch(candidates)
-            
             self.offsets['arxiv'] = 1 
                 
         except Exception as e:
@@ -380,14 +493,11 @@ class ResearchCrawler:
     def search_semantic_scholar(self):
         print(f"Searching Semantic Scholar (Offset: {self.offsets['semantic']})...", flush=True)
         try:
-            # User requested Topic AND Keywords
             if self.keywords_list:
                 if self.keyword_logic == 'all':
-                    # Single query with ALL keywords
                     combined_k = " ".join(self.keywords_list)
                     search_terms = [f"{self.raw_topic} {combined_k}"]
                 else:
-                    # Separate queries for ANY keyword (OR logic)
                     search_terms = [f"{self.raw_topic} {k}" for k in self.keywords_list]
             else:
                 search_terms = [self.raw_topic]
@@ -400,7 +510,8 @@ class ResearchCrawler:
                     "query": term,
                     "offset": self.offsets['semantic'],
                     "limit": limit_per_call, 
-                    "fields": "title,authors,abstract,publicationDate,url,openAccessPdf,externalIds,venue"
+                    "fields": "title,authors,abstract,publicationDate,url,openAccessPdf,externalIds,venue",
+                    "openAccessPdf": "true"
                 }
                 
                 headers = {}
@@ -408,7 +519,6 @@ class ResearchCrawler:
                 if sem_key: headers["x-api-key"] = sem_key
 
                 try:
-                    # Use robust session
                     r = self.session.get(url, params=params, headers=headers, timeout=10)
                     
                     if r.status_code == 429:
@@ -451,51 +561,9 @@ class ResearchCrawler:
             print(f"Error searching Semantic Scholar: {e}")
 
     def search_crossref(self):
-        print(f"Searching Crossref (Offset: {self.offsets['crossref']})...")
-        try:
-            q_str = self.raw_topic
-            if self.keywords_list:
-                q_str += " " + " ".join(self.keywords_list)
-            if self.author:
-                q_str += f" {self.author}"
-
-            limit_per_call = 100
-            
-            # Crossref wrapper doesn't use requests session directly usually,
-            # but is generally robust. We rely on habanero's retries if any.
-            results = self.crossref.works(query=q_str, limit=limit_per_call, offset=self.offsets['crossref'])
-            items = results.get('message', {}).get('items', [])
-            
-            self.offsets['crossref'] += limit_per_call
-            
-            candidates = []
-            for item in items:
-                title = item.get('title', [''])[0]
-                authors_list = item.get('author', [])
-                authors = ", ".join([f"{a.get('given','')} {a.get('family','')}" for a in authors_list])
-                
-                issued = item.get('issued', {}).get('date-parts', [[None]])[0]
-                date_str = None
-                if issued[0]:
-                    date_str = f"{issued[0]}-01-01"
-
-                doi = item.get('DOI')
-                url = item.get('URL')
-                
-                candidates.append({
-                    'title': title,
-                    'authors': authors,
-                    'url': url,
-                    'date': date_str,
-                    'description': "", 
-                    'doi': doi,
-                    'source_name': 'Crossref'
-                })
-            
-            self._process_batch(candidates)
-                    
-        except Exception as e:
-            print(f"Error searching Crossref: {e}")
+        # DEPRECATED IN FAVOR OF OPENALEX
+        # print(f"Searching Crossref (Offset: {self.offsets['crossref']})...")
+        return 
 
     def save_results(self):
         df = pd.DataFrame(self.results)
@@ -518,23 +586,30 @@ class ResearchCrawler:
 
     def run(self):
         try:
-            buffer_target = int(self.final_target_count * 1.2) + 5
+            # OpenAlex First (Highest Quality/Speed)
+            self.search_openalex()
             
+            if len(self.results) >= self.final_target_count:
+                print("Target met with OpenAlex. Skipping other sources.")
+                return
+
+            # Fallback to others
+            buffer_target = int(self.final_target_count * 1.2) + 5
             rounds = 0
-            max_rounds = 30 
+            max_rounds = 10
             
             while len(self.results) < buffer_target and rounds < max_rounds:
                 rounds += 1
                 current_count = len(self.results)
                 print(f"\n--- Search Round {rounds} (Collected: {current_count}/{buffer_target} for target {self.final_target_count}) ---")
                 
-                self.search_crossref()
+                # self.search_crossref() # Deprecated
                 self.search_arxiv()
                 self.search_semantic_scholar()
                 
                 new_count = len(self.results)
                 if new_count == current_count:
-                    print(f">> Round {rounds}: No new papers added (rejected/dup). Digging deeper...")
+                    print(f">> Round {rounds}: No new papers added. Digging deeper...")
             
         except KeyboardInterrupt:
             print("\nUser Interrupted.")
@@ -554,8 +629,55 @@ if __name__ == "__main__":
     parser.add_argument("--count", default=10, type=int)
     parser.add_argument("--sites")
     parser.add_argument("--keyword_logic", default="any")
+    parser.add_argument("--validate", action="store_true", help="Run self-diagnostic smoke test")
     args = parser.parse_args()
     
+    if args.validate:
+        print("--- SELF-DIAGNOSTIC REPORT ---")
+        start_time = time.time()
+        
+        # Test Search: Generative AI, Target 5
+        crawler = ResearchCrawler(
+            topic="Generative AI",
+            keywords="",
+            author="",
+            publication="",
+            date_start="",
+            date_end="",
+            count=5,
+            sites=['openalex'],
+            keyword_logic="any"
+        )
+        
+        # Override run to just use openalex for test
+        crawler.search_openalex()
+        
+        duration = time.time() - start_time
+        print(f"✅ Search Complete: {duration:.2f}s")
+        
+        papers_found = len(crawler.results)
+        print(f"✅ Papers Found: {papers_found}/5")
+        
+        link_health = 0
+        valid_abstracts = 0
+        
+        with requests.Session() as s:
+            for p in crawler.results:
+                try:
+                    r = s.head(p['Source_URL'], timeout=5, allow_redirects=True)
+                    if r.status_code == 200:
+                        link_health += 1
+                except:
+                    pass
+                
+                if p['Description'] and len(p['Description']) > 50:
+                    valid_abstracts += 1
+                    
+        print(f"✅ Link Health: {link_health}/{papers_found} (200 OK)")
+        print(f"✅ Abstract Reconstruction: {valid_abstracts}/{papers_found} Valid")
+        print("------------------------------")
+        sys.exit(0)
+
     sites_list = [s.strip().lower() for s in args.sites.split(',')] if args.sites else ['all']
     
     crawler = ResearchCrawler(
