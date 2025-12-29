@@ -445,15 +445,18 @@ def download_library(limit=None, sort_by="Most Relevant"):
     
     print(f"Found {len(df)} papers. Starting download process...")
 
-    for index, row in tqdm(df.iterrows(), total=len(df), desc="Downloading"):
+    print(f"Found {len(df)} papers. Starting download process (Parallel Execution)...")
+
+    # --- Helper Function for Threading ---
+    def process_paper_wrapper(args):
+        index, row = args
         title = row.get('Title', 'Unknown_Paper')
         dest_folder = row.get('Directory_Path')
-        if not dest_folder: continue
+        if not dest_folder: return (index, False, None, None, True)
             
         if not os.path.exists(dest_folder):
             os.makedirs(dest_folder, exist_ok=True)
             
-        # Determine Target Filename (Title-based is safest for consistency)
         safe_title = sanitize_filename(title)[:50].replace(' ', '_')
         filename = f"{safe_title}.pdf"
         local_path = os.path.join(dest_folder, filename)
@@ -462,64 +465,67 @@ def download_library(limit=None, sort_by="Most Relevant"):
         doi = row.get('DOI')
         
         downloaded = False
+        final_url = url
         
-        # 1. Try Existing URL (if valid)
+        # 1. Try Existing URL
         if url and str(url).startswith('http') and 'doi.org' not in str(url):
             if download_file(url, local_path):
-                downloaded = True
-                print(f"   [Direct] Success: {url}")
+                return (index, True, url, filename, False)
         
         # 2. Try Unpaywall via DOI
-        if not downloaded and doi:
+        if doi:
              new_url = get_pdf_from_unpywall(doi)
              if new_url:
                  if download_file(new_url, local_path):
-                     downloaded = True
-                     df.at[index, 'Source_URL'] = new_url
-                     print(f"   [Unpaywall] Success: {new_url}")
+                     return (index, True, new_url, filename, False)
 
-        # 3. Try Meta Tags via Landing Page URL
-        if not downloaded and url and str(url).startswith('http'):
-             # If it's a landing page, check meta tags
+        # 3. Try Meta Tags
+        if url and str(url).startswith('http'):
              pdf_url = get_pdf_from_meta_tags(url)
              if pdf_url:
                  if download_file(pdf_url, local_path):
-                     downloaded = True
-                     df.at[index, 'Source_URL'] = pdf_url
-                     print(f"   [MetaCheck] Success: {pdf_url}")
+                     return (index, True, pdf_url, filename, False)
 
-        # 4. Secondary Search (Semantic Scholar)
-        if not downloaded:
-            new_url = attempt_secondary_search(title)
-            if new_url:
-                if download_file(new_url, local_path):
-                     downloaded = True
-                     df.at[index, 'Source_URL'] = new_url
-                     print(f"   [Secondary] Success: {new_url}")
+        # 4. Secondary Search (S2)
+        new_url = attempt_secondary_search(title)
+        if new_url:
+            if download_file(new_url, local_path):
+                 return (index, True, new_url, filename, False)
 
-        # 5. DNS / DDG Rescue
-        if not downloaded:
-             candidates = attempt_ddg_fallback(title)
-             if candidates:
-                 for cand_url in candidates:
-                     if download_file(cand_url, local_path):
-                         downloaded = True
-                         df.at[index, 'Source_URL'] = cand_url
-                         print(f"   [DDG Rescue] Success: {cand_url}")
-                         break
-                     else:
-                         print(f"   [DDG Rescue] Failed Candidate: {cand_url}")
+        # 5. DDG Rescue (Multi-Candidate)
+        candidates = attempt_ddg_fallback(title)
+        if candidates:
+            for cand_url in candidates:
+                if download_file(cand_url, local_path):
+                     return (index, True, cand_url, filename, False)
+        
+        return (index, False, None, None, True)
+
+    # --- Execute Parallel Loop ---
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    # Prepare arguments
+    tasks = [(i, row) for i, row in df.iterrows()]
+    
+    # Max Workers = 5 to avoid triggering aggressive DDoS protection
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        future_to_paper = {executor.submit(process_paper_wrapper, task): task for task in tasks}
+        
+        for future in tqdm(as_completed(future_to_paper), total=len(tasks), desc="Downloading (Parallel)"):
+            idx, success, final_url, fname, paywalled = future.result()
             
-        # Final Status Update
-        if downloaded:
-            df.at[index, 'Is_Downloaded'] = True
-            df.at[index, 'Original_Filename'] = filename
-            df.at[index, 'Is_Paywalled'] = False
-            success_count += 1
-        else:
-            df.at[index, 'Is_Paywalled'] = True
-            df.at[index, 'Is_Downloaded'] = False
-            fail_count += 1
+            if success:
+                df.at[idx, 'Is_Downloaded'] = True
+                df.at[idx, 'Source_URL'] = final_url
+                df.at[idx, 'Original_Filename'] = fname
+                df.at[idx, 'Is_Paywalled'] = False
+                success_count += 1
+                # Optional: print success to keep log alive
+                # print(f"   [SUCCESS] {len(str(final_url))} chars") 
+            else:
+                df.at[idx, 'Is_Downloaded'] = False
+                df.at[idx, 'Is_Paywalled'] = True
+                fail_count += 1
 
     print("\nStarting Clean Up and Export...")
     

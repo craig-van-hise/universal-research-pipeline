@@ -220,6 +220,11 @@ def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm
         df.at[index, 'Directory_Path'] = dir_path
 
     if rows_to_drop:
+        print(f"\n--- 🗑️ Rejected Papers Audit ({len(rows_to_drop)}) ---")
+        for idx in rows_to_drop:
+            print(f"   [Discarded] {df.loc[idx, 'Title']}")
+        print("------------------------------------------\n")
+        
         df = df.drop(rows_to_drop)
         print(f"Rejected {len(rows_to_drop)} off-topic papers.")
 

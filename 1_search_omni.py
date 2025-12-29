@@ -543,20 +543,29 @@ class ResearchCrawler:
         verticals = [topic]
         
         prompt = (
-            f"The user is researching '{topic}'. Identify the 8 most distinct, high-yield 'Search Verticals' "
+            f"The user is researching '{topic}'. Identify the 15 most distinct, high-yield 'Search Verticals' "
             f"for finding papers in this field. \n"
             f"INSTRUCTIONS:\n"
             f"1. Include Broad Synonyms (e.g., if topic is Spatial Audio -> '3D Audio', 'Immersive Audio')\n"
             f"2. Include Core Sub-disciplines (e.g., 'Binaural', 'Ambisonics', 'Wave Field Synthesis')\n"
-            f"3. Return ONLY a comma-separated list of 8 terms."
+            f"3. Return strictly a JSON list of strings, e.g. [\"term1\", \"term2\"]."
         )
         
         resp_text = self._query_llm_with_rotation(prompt)
         if resp_text:
-            raw_response = resp_text
-            llm_verticals = [s.strip().replace('"', '') for s in raw_response.split(',') if len(s.strip()) > 3]
-            if llm_verticals:
-                return llm_verticals
+            try:
+                # Clean Markdown
+                cleaned = resp_text.replace("```json", "").replace("```", "").strip()
+                llm_verticals = json.loads(cleaned)
+                
+                if isinstance(llm_verticals, list):
+                    # Sanitize
+                    return [str(s).strip() for s in llm_verticals if len(str(s).strip()) > 2]
+            except Exception as e:
+                print(f"   ⚠️ LLM JSON Parse Failed: {e}. Falling back to text split.")
+                # Fallback: Try to clean the string manually (remove brackets/newlines)
+                clean_text = resp_text.replace('[', '').replace(']', '').replace('\n', ',')
+                return [s.strip().replace('"', '') for s in clean_text.split(',') if len(s.strip()) > 3]
         
         print("   ⚠️ LLM Verticals failed or disabled. Using default.")
         return verticals
@@ -583,8 +592,8 @@ class ResearchCrawler:
         if self.raw_topic not in verticals:
             verticals.insert(0, self.raw_topic)
             
-        # Limit to 8 to respect quotas/time
-        verticals = verticals[:8]
+        # Limit to 15 to respect quotas/time
+        verticals = verticals[:15]
         print(f"   ✅ Targeted Verticals: {verticals}", flush=True)
 
         # --- STEP 2: EXECUTE LOOP ---
