@@ -5,8 +5,8 @@
 
 ## 🚀 Features
 
-* **Omni-Channel Search**: Your librarian simultaneously queries ArXiv, Semantic Scholar, Crossref, CORE, and DOAJ.
-* **Hybrid Topic Search**: Uses **Vector Embeddings (ChromaDB)** + **BM25** to semantically understand your topic (e.g., "Spatial Audio" -> "Binaural", "Ambisonics") for broader recall.
+* **Omni-Channel Search**: Your librarian leverages **OpenAlex** to query a massive global index of research papers, utilizing **Unpaywall** to resolve open-access PDF links.
+* **Topic Expansion**: Uses **Google Gemini** to generate intelligent search verticals (e.g., "Spatial Audio" -> "Ambisonics", "Binaural") to find papers that keyword matching often misses.
 * **Smart Retrieval**: Aggressively acquires PDFs and validates file headers to ensure you receive high-quality, readable documents.
 * **AI Librarian**: Powered by **Google Gemini**, the agent reads abstracts and organizes papers into a custom taxonomy based on subject matter. *Includes robust retry logic for API limits.*
 * **Curated Packaging**: Instead of a messy list of links, ScholarStack packages your research into a **downloadable ZIP file** or syncs it directly to **Google Drive**.

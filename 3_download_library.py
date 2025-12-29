@@ -12,6 +12,7 @@ import time
 import random
 from bs4 import BeautifulSoup
 from googlesearch import search
+from ddgs import DDGS
 from unpywall import Unpywall
 from unpywall.utils import UnpywallCredentials
 UnpywallCredentials('vv@scholar-stack.com') # Using user email logic or placeholder
@@ -32,8 +33,10 @@ def get_filename_from_cd(cd):
 def create_markdown_catalog(df, topic, output_path):
     """Generates a human-readable Markdown catalog."""
     with open(output_path, "w", encoding="utf-8") as f:
+        downloaded_count = len(df[df['Is_Downloaded'] == True]) if 'Is_Downloaded' in df.columns else 0
         f.write(f"# Library Catalog: {topic}\n\n")
-        f.write(f"**Total Papers:** {len(df)}\n")
+        f.write(f"**Total Papers Listed:** {len(df)}  \n")
+        f.write(f"**Total Papers Downloaded:** {downloaded_count}  \n")
         f.write(f"**Generated:** {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}\n\n")
         
         for category, group in df.groupby('Category'):
@@ -87,22 +90,52 @@ def get_pdf_from_unpywall(doi):
     return None
 
 def get_pdf_from_meta_tags(url):
-    """Scrapes landing page for <meta name='citation_pdf_url'>."""
-    if not url or 'pdf' in url.lower(): return None
+    """Scrapes landing page for <meta name='citation_pdf_url'> OR visible PDF links."""
+    if not url or url.lower().endswith('.pdf'): return None
     try:
         headers = {'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'}
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=5)
+        
         if r.status_code == 200:
             soup = BeautifulSoup(r.content, 'html.parser')
-            # Standard Google Scholar tag
+            
+            # 1. Standard Google Scholar Meta Tag
             meta_pdf = soup.find('meta', attrs={'name': 'citation_pdf_url'})
             if meta_pdf and meta_pdf.get('content'):
                 candidate = meta_pdf['content']
-                # TU-Berlin Bug Fix: They return 'localhost' in meta tags sometimes
                 if 'localhost' in candidate and 'tu-berlin' in url:
                     candidate = candidate.replace('http://localhost:4000', 'https://depositonce.tu-berlin.de')
-                print(f"   [Meta Scraper] Found PDF: {candidate}")
+                print(f"   [Meta Scraper] Found PDF (Meta): {candidate}")
                 return candidate
+            
+            # 2. Body Scanning (The "Click the Button" Strategy)
+            # Find all <a> tags with href containing '.pdf'
+            from urllib.parse import urljoin
+            
+            # Strategy A: Strict .pdf extension
+            links = soup.find_all('a', href=True)
+            for link in links:
+                href = link['href']
+                text = link.text.lower()
+                
+                # Check for PDF extension
+                if href.lower().endswith('.pdf') or 'type=pdf' in href.lower():
+                    # Check for "Full Text", "Download", "View" to prioritize good links
+                    # Or closest link if list is short? 
+                    # Let's take the first one that looks like a paper download
+                    full_url = urljoin(url, href)
+                    print(f"   [Page Scraper] Found PDF link: {full_url}")
+                    return full_url
+            
+            # Strategy B: Button text contains "PDF"
+            for link in links:
+                if 'pdf' in link.text.lower() or 'download' in link.text.lower():
+                     full_url = urljoin(url, link['href'])
+                     # A bit risky, but better than nothing
+                     if 'javascript' not in full_url:
+                        print(f"   [Page Scraper] Found PDF button: {full_url}")
+                        return full_url
+                        
     except Exception as e: 
         print(f"   [Meta Scraper] Error scraping {url}: {e}")
         pass
@@ -117,7 +150,7 @@ def attempt_secondary_search(title):
         try:
             # 1. Search Semantic Scholar
             params = {'query': title, 'limit': 1, 'fields': 'title,openAccessPdf,externalIds,url'}
-            r = requests.get('https://api.semanticscholar.org/graph/v1/paper/search', params=params, timeout=10)
+            r = requests.get('https://api.semanticscholar.org/graph/v1/paper/search', params=params, timeout=5)
             
             if r.status_code == 200:
                 data = r.json()
@@ -165,8 +198,72 @@ def attempt_secondary_search(title):
                  
         except: pass
         
-    time.sleep(2) # Politeness delay
+    # time.sleep(2) # Politeness delay removed for speed
+
     return None
+
+def attempt_ddg_fallback(title):
+    """Fallback: Use DuckDuckGo to find PDF candidates (Direct or via Landing Page)."""
+    print(f"   [DDG Rescue] Hunting for '{title[:30]}...'")
+    candidates = []
+    seen_urls = set()
+    
+    try:
+        with DDGS() as ddgs:
+            # 1. Strict PDF Search
+            query = f'"{title}" filetype:pdf'
+            results = list(ddgs.text(query, max_results=3))
+            
+            for r in results:
+                url = r.get('href', '')
+                if url in seen_urls: continue
+                
+                if url.lower().endswith('.pdf'):
+                    if 'researchgate.net' in url: continue
+                    print(f"   [DDG Rescue] Found PDF Candidate: {url}")
+                    candidates.append(url)
+                    seen_urls.add(url)
+            
+            # 2. Relaxed Search & Scrape
+            query = f'{title} pdf'
+            results = list(ddgs.text(query, max_results=5))
+            for r in results:
+                url = r.get('href', '')
+                if url in seen_urls: continue
+                
+                # A. Direct PDF
+                if url.lower().endswith('.pdf'):
+                    if 'researchgate.net' in url: continue
+                    print(f"   [DDG Rescue] Found PDF Candidate (Ext): {url}")
+                    candidates.append(url)
+                    seen_urls.add(url)
+                    continue
+                
+                # B. ArXiv Check
+                if 'arxiv.org/abs' in url:
+                    pdf_url = url.replace('/abs/', '/pdf/') + ".pdf"
+                    print(f"   [DDG Rescue] Found ArXiv Candidate: {pdf_url}")
+                    candidates.append(pdf_url)
+                    seen_urls.add(pdf_url)
+                    continue
+                    
+                # C. Landing Page Scrape (The "Human Click" Strategy)
+                if 'books.google' in url or 'scholar.google' in url or 'researchgate.net' in url: continue
+                
+                # Only scrape if we don't have enough candidates yet
+                if len(candidates) >= 3: break
+                
+                print(f"   [DDG Rescue] Checking candidate page: {url}")
+                scraped_pdf = get_pdf_from_meta_tags(url)
+                if scraped_pdf and scraped_pdf not in seen_urls:
+                    print(f"   [DDG Rescue] Extracted PDF from page: {scraped_pdf}")
+                    candidates.append(scraped_pdf)
+                    seen_urls.add(scraped_pdf)
+
+    except Exception as e:
+        print(f"   [DDG Rescue] Error: {e}")
+        
+    return candidates  # Returns list
 
 def attempt_google_fallback(title):
     """Last Resort: Mimic User's 'Google It' behavior."""
@@ -245,7 +342,7 @@ def download_file(url, local_path):
     ]
     
     # 1. Try Direct Method
-    for attempt in range(3):
+    for attempt in range(2):
         try:
             ua = random.choice(user_agents)
             headers = {
@@ -264,7 +361,8 @@ def download_file(url, local_path):
                 headers['Sec-Fetch-User'] = '?1'
 
             # SSL Verify=False for older academic repos (IOA, TU-Berlin sometimes have cert issues)
-            r = requests.get(url, headers=headers, stream=True, timeout=20, verify=False)
+            # Timeout reduced to 10s to fail fast
+            r = requests.get(url, headers=headers, stream=True, timeout=10, verify=False)
             
             if r.status_code == 403:
                 time.sleep(2) # Backoff for 403
@@ -348,80 +446,79 @@ def download_library(limit=None, sort_by="Most Relevant"):
     print(f"Found {len(df)} papers. Starting download process...")
 
     for index, row in tqdm(df.iterrows(), total=len(df), desc="Downloading"):
-        url = row.get('Source_URL')
-        doi = row.get('DOI')
-        
-        # --- ROBUST URL RESOLUTION STRATEGY ---
-        # 1. Clean Landing Page URL? Use Scraper
-        if url and 'doi.org' in str(url):
-             meta_url = get_pdf_from_meta_tags(url)
-             if meta_url: 
-                 url = meta_url
-                 df.at[index, 'Source_URL'] = meta_url
-                 
-        # 2. If Scraper Failed (or no URL), try Unpywall
-        if pd.isna(url) or 'doi.org' in str(url) or not str(url).startswith('http'):
-             new_url = get_pdf_from_unpywall(doi)
-             if new_url: 
-                 url = new_url
-                 df.at[index, 'Source_URL'] = new_url 
-
-        # 3. Final Check
-        if pd.isna(url) or not str(url).startswith('http'):
-            # --- NEW: SECONDARY SEARCH (Deep Rescue) ---
-            new_url = attempt_secondary_search(row.get('Title'))
-            if new_url:
-                url = new_url
-                df.at[index, 'Source_URL'] = new_url
-            else:
-                 # --- NEW: TERTIARY SEARCH (Nuclear Option) ---
-                 google_url = attempt_google_fallback(row.get('Title'))
-                 if google_url:
-                     url = google_url
-                     df.at[index, 'Source_URL'] = google_url
-                 else:
-                     continue
-            
+        title = row.get('Title', 'Unknown_Paper')
         dest_folder = row.get('Directory_Path')
         if not dest_folder: continue
             
         if not os.path.exists(dest_folder):
             os.makedirs(dest_folder, exist_ok=True)
             
-        title = row.get('Title', 'Unknown_Paper')
-        
-        # Determine Filename
-        filename = "document.pdf"
-        try:
-            # Try to get cleaner name from URL first
-            parsed_url = urlparse(url)
-            base = os.path.basename(unquote(parsed_url.path))
-            if base and base.lower().endswith('.pdf'):
-                filename = base
-            
-            filename = sanitize_filename(filename)
-            name_part, ext = os.path.splitext(filename)
-            
-            # Ensure it ends in .pdf
-            if not ext: 
-                filename += ".pdf"
-            
-            # Prevent generic overwrites or bad names
-            if len(name_part) < 4 or name_part.lower() in ['document', 'file', 'download', 'view']:
-                safe_title = sanitize_filename(title)[:40].replace(' ', '_')
-                filename = f"{safe_title}.pdf"
-        except:
-            filename = "document.pdf"
-
+        # Determine Target Filename (Title-based is safest for consistency)
+        safe_title = sanitize_filename(title)[:50].replace(' ', '_')
+        filename = f"{safe_title}.pdf"
         local_path = os.path.join(dest_folder, filename)
         
-        # Execute Download
-        if download_file(url, local_path):
+        url = row.get('Source_URL')
+        doi = row.get('DOI')
+        
+        downloaded = False
+        
+        # 1. Try Existing URL (if valid)
+        if url and str(url).startswith('http') and 'doi.org' not in str(url):
+            if download_file(url, local_path):
+                downloaded = True
+                print(f"   [Direct] Success: {url}")
+        
+        # 2. Try Unpaywall via DOI
+        if not downloaded and doi:
+             new_url = get_pdf_from_unpywall(doi)
+             if new_url:
+                 if download_file(new_url, local_path):
+                     downloaded = True
+                     df.at[index, 'Source_URL'] = new_url
+                     print(f"   [Unpaywall] Success: {new_url}")
+
+        # 3. Try Meta Tags via Landing Page URL
+        if not downloaded and url and str(url).startswith('http'):
+             # If it's a landing page, check meta tags
+             pdf_url = get_pdf_from_meta_tags(url)
+             if pdf_url:
+                 if download_file(pdf_url, local_path):
+                     downloaded = True
+                     df.at[index, 'Source_URL'] = pdf_url
+                     print(f"   [MetaCheck] Success: {pdf_url}")
+
+        # 4. Secondary Search (Semantic Scholar)
+        if not downloaded:
+            new_url = attempt_secondary_search(title)
+            if new_url:
+                if download_file(new_url, local_path):
+                     downloaded = True
+                     df.at[index, 'Source_URL'] = new_url
+                     print(f"   [Secondary] Success: {new_url}")
+
+        # 5. DNS / DDG Rescue
+        if not downloaded:
+             candidates = attempt_ddg_fallback(title)
+             if candidates:
+                 for cand_url in candidates:
+                     if download_file(cand_url, local_path):
+                         downloaded = True
+                         df.at[index, 'Source_URL'] = cand_url
+                         print(f"   [DDG Rescue] Success: {cand_url}")
+                         break
+                     else:
+                         print(f"   [DDG Rescue] Failed Candidate: {cand_url}")
+            
+        # Final Status Update
+        if downloaded:
             df.at[index, 'Is_Downloaded'] = True
             df.at[index, 'Original_Filename'] = filename
             df.at[index, 'Is_Paywalled'] = False
             success_count += 1
         else:
+            df.at[index, 'Is_Paywalled'] = True
+            df.at[index, 'Is_Downloaded'] = False
             fail_count += 1
 
     print("\nStarting Clean Up and Export...")
