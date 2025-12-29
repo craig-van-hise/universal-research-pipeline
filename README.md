@@ -6,9 +6,9 @@
 ## 🚀 Features
 
 * **Omni-Channel Search**: Your librarian simultaneously queries ArXiv, Semantic Scholar, Crossref, CORE, and DOAJ.
-* **Deep Discovery**: Uses iterative keyword search and deep pagination to find niche papers that standard searches miss.
-* **AI Librarian Agent**: Powered by **Google Gemini**, the agent reads abstracts and organizes papers into a custom taxonomy based on subject matter. *Gracefully falls back to a flat structure if no API key is provided.*
+* **Hybrid Topic Search**: Uses **Vector Embeddings (ChromaDB)** + **BM25** to semantically understand your topic (e.g., "Spatial Audio" -> "Binaural", "Ambisonics") for broader recall.
 * **Smart Retrieval**: Aggressively acquires PDFs and validates file headers to ensure you receive high-quality, readable documents.
+* **AI Librarian**: Powered by **Google Gemini**, the agent reads abstracts and organizes papers into a custom taxonomy based on subject matter. *Includes robust retry logic for API limits.*
 * **Curated Packaging**: Instead of a messy list of links, ScholarStack packages your research into a **downloadable ZIP file** or syncs it directly to **Google Drive**.
 * **Modern Interface**: A Streamlit web app with real-time logs, history tracking, and granular controls over your librarian's search parameters.
 
@@ -47,6 +47,7 @@ Library_Topic_Name/
 
 3. **Gemini API Key (Optional but Recommended):**
 * Get a free key from [aistudio.google.com](https://aistudio.google.com).
+* **Important:** Ensure your key is in a `.env` file as `GOOGLE_API_KEY=...`. The system is configured to prioritize this file over shell variables to prevent key exhaustion errors.
 
 
 
