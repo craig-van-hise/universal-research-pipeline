@@ -1,5 +1,5 @@
 import pandas as pd
-from google import genai
+import google.generativeai as genai
 import os
 import json
 from dotenv import load_dotenv
@@ -11,7 +11,8 @@ from collections import Counter
 import sys
 
 # Load environment variables
-load_dotenv()
+# Load environment variables (Force override to prevent stale shell keys)
+load_dotenv(override=True)
 
 def clean_json_string(s):
     """Helper to clean markdown formatting from JSON string."""
@@ -29,11 +30,24 @@ def sanitize_folder_name(name):
     clean = "".join([c if c.isalnum() or c in (' ', '_', '-') else '' for c in name])
     return clean.strip().replace(' ', '_')
 
-def get_best_model(client):
-    """Returns the best available Flash model (with valid fallback)."""
-    # Hardcoded for stability and quota optimization
-    print("Selected Model: gemini-2.0-flash-001", flush=True)
-    return 'gemini-2.0-flash-001'
+def get_best_model():
+    """Dynamically finds the best available Flash model (matches Phase 1 logic)."""
+    try:
+        available_models = []
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods and 'flash' in m.name.lower():
+                available_models.append(m.name)
+        
+        if not available_models: return 'models/gemini-pro'
+        
+        available_models.sort()
+        # Prefer 1.5-flash if 2.0 is causing issues, or stick to auto-latest?
+        # User asked to match Phase 1. Phase 1 picks the LAST sorted item.
+        best_model = available_models[-1]
+        print(f"Selected Model: {best_model}", flush=True)
+        return best_model
+    except:
+            return 'models/gemini-1.5-flash'
 
 def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm=False):
     print("=== Phase 3: The Smart Architect (Improved Clustering) ===", flush=True)
@@ -90,8 +104,8 @@ def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm
         print(">> Falling back to single folder structure.")
     else:
 
-        # Valid API Key case
-        client = genai.Client(api_key=api_key)
+        # Valid API Key case (Standardized Init)
+        genai.configure(api_key=api_key)
         
         papers_payload = []
         for index, row in df.iterrows():
@@ -111,7 +125,7 @@ def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm
         else:
             cat_count_msg = "5-8 distinct categories"
 
-        model_name = get_best_model(client)
+        model_name = get_best_model()
         print(f"Consulting {model_name} to generate taxonomy...", flush=True)
         
         prompt = f"""
@@ -135,12 +149,12 @@ def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm
         """
 
         # Retry Loop for Phase 2
+        model = genai.GenerativeModel(model_name)
         
-        # Retry Loop for Phase 2
         max_retries = 5
         for attempt in range(max_retries):
             try:
-                response = client.models.generate_content(model=model_name, contents=prompt)
+                response = model.generate_content(prompt)
                 if response.text:
                     cleaned_response = clean_json_string(response.text)
                     taxonomy_map = json.loads(cleaned_response)
@@ -149,7 +163,7 @@ def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm
                     break
             except Exception as e:
                  if "429" in str(e) or "429" in getattr(e, 'message', ''):
-                    wait = (attempt + 1) * 30 # Aggressive backoff (30s, 60s...)
+                    wait = 60 # Fixed 60s wait (RPM reset window)
                     print(f"⚠️ Quota Exceeded (Attempt {attempt+1}/{max_retries}). Waiting {wait}s...")
                     time.sleep(wait)
                  else:

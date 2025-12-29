@@ -25,6 +25,7 @@ os.environ["GRPC_VERBOSITY"] = "ERROR" # Silence Google GRPC warnings
 
 # Load Environment
 # Load Environment (Force Override to ignore stale shell vars)
+# Load environment variables (Force override to ensure fresh keys)
 load_dotenv(override=True)
 
 # Check for Google API

@@ -32,6 +32,19 @@
 *   **Search Slowness:** Deep searching logic (Pass 1 + Pass 2) is slow.
 *   **Search Methods:** Still require significant tuning and optimization.
 
+
+## Technical Constraints & Critical Configuration
+> [!IMPORTANT]
+> **1. The "Ghost Key" Phenomenon:**
+> Python scripts can inherit stale environment variables from the parent shell (e.g., `export GOOGLE_API_KEY=...`) which OVERRIDE the `.env` file values by default.
+> **Fix:** All scripts MUST use `load_dotenv(override=True)` to force the `.env` file to take precedence. Do NOT remove this override.
+
+> [!WARNING]
+> **2. "Unlimited Trial" vs. "Free Tier":**
+> Even with a $300 "Unlimited" credit trial, the API Key functions as **Free Tier** (with strict Request Per Minute limits) unless Billing is enabled on the Google Cloud Project.
+> **Behavior:** Processing large batches (50+ papers) will trigger `429 Quota Exceeded`.
+> **Solution:** The system includes a "Patience Module" that waits exactly **60 seconds** (the RPM reset window) when this occurs. Do NOT interpret this wait as a system hang. It is a necessary safety valve.
+
 ## Recent Accomplishments
 *   **API Stability:** Resolved persistent "Quota Exceeded" errors by implementing a **Persistence Loop** (wait & retry) for the Gemini API and fixing a critical environment variable mismatch using `load_dotenv(override=True)`.
 *   **Search Vertical Expansion:** Successfully implemented LLM-driven "Search Verticals" (e.g., Topic -> Sub-disciplines) to maximize OpenAlex recall.
