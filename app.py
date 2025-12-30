@@ -1,6 +1,7 @@
 import streamlit as st
 import os
 import sys
+import time
 import datetime
 import shutil
 import pandas as pd
@@ -67,11 +68,14 @@ def load_history():
 
 @st.dialog("Search History", width="large")
 def search_history_modal():
-    st.write("Select a row to load its settings.")
+    st.write("Select rows to process.")
     df = load_history()
     
     if df.empty:
         st.info("No history found.")
+        if st.button("Close"):
+            st.session_state.history_open = False
+            st.rerun()
         return
 
     # Modern Selection API
@@ -80,25 +84,59 @@ def search_history_modal():
         use_container_width=True,
         hide_index=True,
         on_select="rerun",
-        selection_mode="single-row",
-        height=600
+        selection_mode="multi-row",
+        height=400
     )
     
-    if len(event.selection.rows) > 0:
-        idx = event.selection.rows[0]
-        selected_row = df.iloc[idx].to_dict()
-        
-        # Restore Dates
-        if 'date_start' in selected_row and selected_row['date_start']:
-            try: selected_row['date_start'] = datetime.date.fromisoformat(selected_row['date_start'])
-            except: pass
-        if 'date_end' in selected_row and selected_row['date_end']:
-            try: selected_row['date_end'] = datetime.date.fromisoformat(selected_row['date_end'])
-            except: pass
-            
-        save_settings(selected_row)
-        st.toast("Settings Loaded from History! Reloading...", icon="✅")
-        st.rerun()
+    col1, col2 = st.columns([1, 1])
+    
+    with col1:
+        if st.button("📂 Load Selected", type="primary", use_container_width=True):
+            if len(event.selection.rows) == 0:
+                st.warning("Select 1 entry.")
+            elif len(event.selection.rows) > 1:
+                st.error("Select ONLY 1 entry to load.")
+            else:
+                idx = event.selection.rows[0]
+                selected_row = df.iloc[idx].to_dict()
+                
+                # Restore Dates
+                if 'date_start' in selected_row and selected_row['date_start']:
+                    try: selected_row['date_start'] = datetime.date.fromisoformat(selected_row['date_start'])
+                    except: pass
+                if 'date_end' in selected_row and selected_row['date_end']:
+                    try: selected_row['date_end'] = datetime.date.fromisoformat(selected_row['date_end'])
+                    except: pass
+                    
+                save_settings(selected_row)
+                st.toast("Settings Loaded!", icon="✅")
+                time.sleep(0.5)
+                # Close modal on load
+                st.session_state.history_open = False
+                st.rerun()
+
+    with col2:
+        if st.button("🗑️ Delete Selected", type="secondary", use_container_width=True):
+            if len(event.selection.rows) == 0:
+                st.warning("Select entries.")
+            else:
+                rows_to_delete = event.selection.rows
+                try:
+                    with open(HISTORY_FILE, "r") as f:
+                        full_history = json.load(f)
+                    
+                    for r_idx in sorted(rows_to_delete, reverse=True):
+                        if r_idx < len(full_history):
+                            full_history.pop(r_idx)
+                            
+                    with open(HISTORY_FILE, "w") as f:
+                        json.dump(full_history, f, indent=2)
+                        
+                    st.toast("Entries Deleted.", icon="🗑️")
+                    time.sleep(0.5)
+                    st.rerun() # This will now re-open the modal because history_open is True
+                except Exception as e:
+                    st.error(f"Error: {e}")
         
 st.set_page_config(
     page_title="ScholarStack",
@@ -245,6 +283,10 @@ if st.session_state.pipeline_run and st.session_state.zip_path and os.path.exist
 # --- Sidebar ---
 with st.sidebar:
     if st.button("📜 View Search History", use_container_width=True):
+        st.session_state.history_open = True
+        st.rerun()
+        
+    if st.session_state.get('history_open', False):
         search_history_modal()
     st.divider()
 
@@ -369,6 +411,7 @@ if start_btn:
         st.session_state.pipeline_run = False
         st.session_state.zip_path = None
         st.session_state.catalog_content = None
+        st.session_state.history_open = False # Prevent zombie modal
         
         if st.session_state.temp_dir_to_cleanup:
             try: shutil.rmtree(st.session_state.temp_dir_to_cleanup)
