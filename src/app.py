@@ -9,6 +9,7 @@ import altair as alt
 from pipeline_manager import run_full_pipeline
 from drive_manager import DriveManager
 from auth_manager import get_login_url, get_token_from_code, get_user_info
+import alerts_db
 import json
 
 SETTINGS_FILE = os.path.join(os.path.dirname(__file__), "../data/user_settings.json")
@@ -356,6 +357,69 @@ with st.sidebar:
         
     if st.session_state.get('history_open', False):
         search_history_modal()
+    st.divider()
+    
+    # --- Alert Management ---
+    with st.expander("📬 Manage Alerts"):
+        st.write("**Save Current Search as Alert**")
+        
+        # Initialize alerts database
+        alerts_db.init_db()
+        
+        alert_email = st.text_input(
+            "Email for notifications",
+            placeholder="your.email@gmail.com",
+            key="alert_email_input"
+        )
+        
+        if st.button("💾 Save Current Search as Alert", use_container_width=True):
+            if not alert_email or '@' not in alert_email:
+                st.error("Please enter a valid email address")
+            else:
+                # Get current search parameters
+                current_topic = st.session_state.get('topic_input', '')
+                current_keywords = st.session_state.get('keywords_input_std', '')
+                
+                if not current_topic and not current_keywords:
+                    st.warning("Please enter a topic or keywords first")
+                else:
+                    query = f"{current_topic} + {current_keywords}" if current_keywords else current_topic
+                    sub_id = alerts_db.add_subscription(
+                        email=alert_email,
+                        query=query,
+                        source="OpenAlex"
+                    )
+                    st.success(f"✅ Alert saved! (ID: {sub_id})")
+                    st.rerun()
+        
+        st.divider()
+        st.write("**Active Alerts**")
+        
+        subscriptions = alerts_db.get_all_subscriptions()
+        
+        if not subscriptions:
+            st.info("No alerts saved yet")
+        else:
+            for sub in subscriptions:
+                col1, col2, col3 = st.columns([3, 1, 1])
+                
+                with col1:
+                    status_icon = "✅" if sub['active'] else "⏸️"
+                    st.write(f"{status_icon} **{sub['search_query']}**")
+                    st.caption(f"To: {sub['user_email']}")
+                
+                with col2:
+                    new_state = not sub['active']
+                    btn_label = "Pause" if sub['active'] else "Resume"
+                    if st.button(btn_label, key=f"toggle_{sub['id']}", use_container_width=True):
+                        alerts_db.toggle_subscription(sub['id'], new_state)
+                        st.rerun()
+                
+                with col3:
+                    if st.button("🗑️", key=f"delete_{sub['id']}", use_container_width=True):
+                        alerts_db.delete_subscription(sub['id'])
+                        st.rerun()
+    
     st.divider()
 
     st.header("Research Parameters")
