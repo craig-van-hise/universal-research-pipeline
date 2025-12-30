@@ -4,6 +4,7 @@ import urllib3
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 import os
 import re
+import csv
 import json
 import shutil
 from urllib.parse import urlparse, unquote
@@ -30,10 +31,10 @@ def get_filename_from_cd(cd):
         return None
     return fname[0].strip()
 
-def create_markdown_catalog(df, topic, output_path, search_params=None):
+def create_markdown_catalog(papers, topic, output_path, search_params=None):
     """Generates a human-readable Markdown catalog."""
     with open(output_path, "w", encoding="utf-8") as f:
-        downloaded_count = len(df[df['Is_Downloaded'] == True]) if 'Is_Downloaded' in df.columns else 0
+        downloaded_count = sum(1 for p in papers if p.get('is_downloaded'))
         f.write(f"# Library Catalog: {topic}\n\n")
         
         if search_params:
@@ -42,33 +43,88 @@ def create_markdown_catalog(df, topic, output_path, search_params=None):
                 if v: f.write(f"- **{k}:** {v}\n")
             f.write("\n")
             
-        f.write(f"**Total Papers Listed:** {len(df)}  \n")
+        f.write(f"**Total Papers Listed:** {len(papers)}  \n")
         f.write(f"**Total Papers Downloaded:** {downloaded_count}  \n")
         f.write(f"**Generated:** {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M')}\n\n")
         
-        for category, group in df.groupby('Category'):
-            f.write(f"## {category}\n\n")
+        # Sort keys for grouping? Assuming papers list is already sorted or we group here.
+        # But 'papers' is a list of dicts. We need to group by Category.
+        # Simple approach: Convert back to DF for easy grouping or use itertools.groupby
+        # Let's stick to simple iteration if already sorted, or just re-sort.
+        papers_sorted = sorted(papers, key=lambda x: (x.get('category', 'Uncategorized'), x.get('title', '')))
+        
+        current_cat = None
+        for paper in papers_sorted:
+            cat = paper.get('category', 'Uncategorized')
+            if cat != current_cat:
+                f.write(f"## {cat}\n\n")
+                f.write("| Title | First Author | Year | Journal | Citations | Link |\n")
+                f.write("|---|---|---|---|---|---|\n")
+                current_cat = cat
             
-            for _, row in group.iterrows():
-                title = row.get('Title', 'Unknown Title')
-                authors = row.get('Authors', 'Unknown Authors')
-                date = str(row.get('Publication_Date', 'Unknown Date'))
-                status = "Downloaded" if row.get('Is_Downloaded') else "Missing/Paywalled"
-                filename = row.get('Original_Filename', 'N/A')
-                url = row.get('Source_URL', '#')
-                desc = str(row.get('Description', ''))
-                
-                if len(desc) > 200:
-                    desc = desc[:200] + "..."
-                desc = desc.replace('\n', ' ')
+            title = paper.get('title', 'Unknown Title').replace('|', '-') # Escape pipes
+            
+            authors_list = paper.get('authors', [])
+            if not authors_list:
+                first_author = "Unknown"
+            else:
+                first_author = authors_list[0]
+                if len(authors_list) > 1:
+                    first_author += " et al."
+            
+            year = str(paper.get('year', ''))
+            journal = str(paper.get('journal', ''))
+            citations = str(paper.get('citation_count', ''))
+            if citations == 'None': citations = ''
+            
+            url = paper.get('url', '')
+            link = f"[Source]({url})" if url else "N/A"
+            
+            f.write(f"| {title} | {first_author} | {year} | {journal} | {citations} | {link} |\n")
+        f.write("\n")
 
-                f.write(f"*   **{title}** ({date})\n")
-                f.write(f"    *   *Authors:* {authors}\n")
-                f.write(f"    *   *Status:* {status}\n")
-                if row.get('Is_Downloaded'):
-                    f.write(f"    *   *Filename:* `{filename}`\n")
-                f.write(f"    *   *Source:* [Link]({url})\n")
-                f.write(f"    *   *Abstract:* {desc}\n\n")
+def create_csv_catalog(papers, output_path):
+    """Generates a strictly quoted CSV catalog."""
+    headers = ['Title', 'Authors', 'Year', 'Journal', 'DOI', 'Citation_Count', 'URL', 'PDF_Link', 'Filename', 'Abstract']
+    
+    with open(output_path, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=headers, quoting=csv.QUOTE_ALL)
+        writer.writeheader()
+        
+        for p in papers:
+            authors_str = "; ".join(p.get('authors', []))
+            writer.writerow({
+                'Title': p.get('title', ''),
+                'Authors': authors_str,
+                'Year': p.get('year', ''),
+                'Journal': p.get('journal', ''),
+                'DOI': p.get('doi', ''),
+                'Citation_Count': p.get('citation_count', 0),
+                'URL': p.get('url', ''),
+                'PDF_Link': p.get('pdf_url', ''),
+                'Filename': p.get('filename', ''),
+                'Abstract': p.get('abstract', '')
+            })
+
+def create_ris_catalog(papers, output_path):
+    """Generates an RIS file for reference managers."""
+    with open(output_path, 'w', encoding='utf-8') as f:
+        for p in papers:
+            f.write("TY  - JOUR\n")
+            f.write(f"TI  - {p.get('title', '')}\n")
+            
+            for auth in p.get('authors', []):
+                f.write(f"AU  - {auth}\n")
+                
+            f.write(f"PY  - {p.get('year', '')}\n")
+            f.write(f"JO  - {p.get('journal', '')}\n")
+            
+            if p.get('doi'): f.write(f"DO  - {p.get('doi')}\n")
+            if p.get('url'): f.write(f"UR  - {p.get('url')}\n")
+            if p.get('pdf_url'): f.write(f"L1  - {p.get('pdf_url')}\n")
+            if p.get('abstract'): f.write(f"AB  - {p.get('abstract')}\n")
+            
+            f.write("ER  - \n\n")
 
 def sanitize_folder_name(name):
     clean = "".join([c if c.isalnum() or c in (' ', '_', '-') else '' for c in name])
@@ -729,13 +785,53 @@ def download_library(limit=None, sort_by="Most Relevant", **kwargs):
 
     zip_name = f"Library_{topic_sanitized}"
     
-    # 3. Catalog (BEFORE Zip)
-    print("Generating Library Catalog...")
-    df = df.sort_values(by='Category')
-    if os.path.exists(topic_root):
-        catalog_path = os.path.join(topic_root, f"Catalog_{topic_sanitized}.md")
+    # 3. Standardize Metadata & Generate Catalogs
+    print("Standardizing metadata and generating catalogs...")
+    
+    standardized_papers = []
+    for _, row in df.iterrows():
+        # Parse Authors safely
+        auth_raw = row.get('Authors', '')
+        if pd.isna(auth_raw): auth_raw = ""
+        # Assuming comma separated in CSV, but checking given headers
+        # Implementation Plan says "join list with semicolon" for CSV output
+        # But INPUT is likely comma-separated string from earlier steps?
+        # Let's try to split by comma, and clean
+        if isinstance(auth_raw, str):
+            authors_list = [a.strip() for a in auth_raw.split(',')]
+        else:
+            authors_list = []
+            
+        # Parse Year
+        pub_date = row.get('Publication_Date', '')
+        year = ""
+        try:
+            if pd.notna(pub_date):
+                 year = str(pub_date)[:4]
+        except: pass
         
-        # Build Search Params from kwargs
+        p_obj = {
+            'title': row.get('Title', ''),
+            'authors': authors_list,
+            'year': year,
+            'date': str(row.get('Publication_Date', '')),
+            'journal': row.get('_Source', 'Unknown'), # Mapping _Source to Journal/Venue for now
+            'doi': row.get('DOI', ''),
+            'url': row.get('Source_URL', ''),
+            'pdf_url': row.get('Source_URL', '') if str(row.get('Source_URL', '')).endswith('.pdf') else '', # Rough guess
+            'abstract': row.get('Description', ''),
+            'citation_count': row.get('Citation_Count', 0),
+            'filename': row.get('Original_Filename', ''),
+            'category': row.get('Category', 'Uncategorized'),
+            'is_downloaded': row.get('Is_Downloaded', False),
+            'status': "Downloaded" if row.get('Is_Downloaded') else "Missing/Paywalled"
+        }
+        standardized_papers.append(p_obj)
+
+    if os.path.exists(topic_root):
+        cat_base = os.path.join(topic_root, f"Catalog_{topic_sanitized}")
+        
+        # A. Markdown
         search_params = {
             "Topics": current_topic,
             "Keywords": kwargs.get('keywords', 'N/A'),
@@ -743,8 +839,13 @@ def download_library(limit=None, sort_by="Most Relevant", **kwargs):
             "Limit": limit,
             "Date Range": kwargs.get('date_range', 'All Time')
         }
+        create_markdown_catalog(standardized_papers, current_topic, cat_base + ".md", search_params)
         
-        create_markdown_catalog(df, current_topic, catalog_path, search_params)
+        # B. CSV
+        create_csv_catalog(standardized_papers, cat_base + ".csv")
+        
+        # C. RIS
+        create_ris_catalog(standardized_papers, cat_base + ".ris")
 
     # 4. Zip
     if os.path.exists(topic_root):

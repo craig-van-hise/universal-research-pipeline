@@ -282,12 +282,12 @@ def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm
     # 3. Post-Processing / Fallback Assignment
     if ai_success:
         # Enforce Orphan Rules
-        # Enforce Orphan Rules (Folder Density Check)
-        # We must ensure that every FOLDER has at least 2 papers. 
-        # If use_keywords=True, a Global Category might satisfy count > 2, 
-        # but split across keywords, it might result in size 1 folders.
+        # New Logic: No Orphan Reassignment
+        # We accept singleton categories to prevent "Miscellaneous" bloating.
+        counts = Counter(taxonomy_map.values())
+        print(f"DEBUG: Category Distribution: {counts}") 
         
-        # 1. Map current AI categories to the DataFrame temporarily
+        # 1. Map current AI categories to the DataFrame
         mapped_count = 0
         total_rows = len(df)
         for idx, row in df.iterrows():
@@ -297,44 +297,6 @@ def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm
              df.at[idx, '_Temp_Cat'] = cat
         
         print(f"DEBUG: Mapped {mapped_count}/{total_rows} papers to categories. (Rest are Miscellaneous)")
-
-        # 2. Check Density
-        if use_keywords:
-             # Check (Vertical, Category) pairs
-             # Ensure Search_Vertical is present
-             if 'Search_Vertical' not in df.columns:
-                 df['Search_Vertical'] = 'Unsorted'
-                 
-             groups = df.groupby(['Search_Vertical', '_Temp_Cat']).size()
-             global_counts = df['_Temp_Cat'].value_counts()
-             
-             for (vertical, category), local_count in groups.items():
-                 if category == "DISCARD": continue
-                 
-                 # Density Rule (Relaxed for Small Pools): 
-                 # Only merge if the category is a global orphan (Total < 2).
-                 # If the category exists validly (>=2 papers globally), allow it to exist 
-                 # in local keyword folders even as a singleton (Size 1) to preserve taxonomy.
-                 global_count = global_counts.get(category, 0)
-                 
-                 is_globally_weak = global_count < 2
-                 
-                 if is_globally_weak:
-                     # Update the main taxonomy map for these specific items to 'Miscellaneous'
-                     mask = (df['Search_Vertical'] == vertical) & (df['_Temp_Cat'] == category)
-                     to_fix = df[mask]
-                     for _, r in to_fix.iterrows():
-                         pid = r['DOI'] if pd.notna(r['DOI']) and str(r['DOI']).strip() else r['Title']
-                         taxonomy_map[pid] = "Miscellaneous"
-        else:
-            # Global Density Check (Original)
-            counts = Counter([cat for cat in taxonomy_map.values() if cat != "DISCARD"])
-            orphans = [cat for cat, count in counts.items() if count < 2]
-            if orphans:
-                general_cat = "Miscellaneous"
-                for doc_id, cat in taxonomy_map.items():
-                    if cat in orphans:
-                        taxonomy_map[doc_id] = general_cat
     else:
         # Fallback Mode
         pass

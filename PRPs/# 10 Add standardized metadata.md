@@ -25,7 +25,7 @@ Ensure your paper objects/dictionaries now strictly use these keys. If data is m
 
 ### **Step 2: Update the Existing Markdown Generator (`catalog.md`)**
 
-You are already generating this file. Update the function to use the new standard keys above.
+You are already generating this file. Update the function to add the new standard keys above. Keep existing keys not covered by the new ones (such as "status"). Make sure the .md version retiains the "Search Settings" section.
 
 * **Format:** Keep the existing table format for readability.
 * **Columns:** `| Title | First Author | Year | Journal | Citations | Link |`
