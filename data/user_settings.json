@@ -8,6 +8,7 @@
   "sort_method": "Date: Newest",
   "auto_folders": true,
   "use_keywords_subfolders": true,
+  "filename_format": "Title",
   "use_start_date": false,
   "use_end_date": false,
   "date_start": null,

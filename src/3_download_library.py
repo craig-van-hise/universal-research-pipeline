@@ -22,6 +22,49 @@ def sanitize_filename(name):
     """Sanitizes filenames to be OS-safe."""
     return re.sub(r'[<>:"/\\|?*]', '', name).strip()
 
+def generate_filename(paper, format_option="Title"):
+    """
+    Generates a filename based on the user's selected format.
+    Options: 'Title', 'Author - Year - Title', 'Year - Journal - Title'
+    """
+    title = paper.get('Title', 'Untitled')
+    # Basic clean first
+    title = sanitize_filename(title)
+    
+    if format_option == "Title":
+        base = title
+    elif format_option == "Author - Year - Title":
+        # Extract first author
+        authors_raw = paper.get('Authors', [])
+        # If it's a string (from CSV), split it
+        if isinstance(authors_raw, str):
+            authors_list = authors_raw.split(';')
+        else:
+            authors_list = authors_raw
+            
+        first_auth = "Unknown"
+        if authors_list and len(authors_list) > 0:
+            first_auth = authors_list[0].split(',')[0].strip() # Just surname if possible
+            first_auth = sanitize_filename(first_auth)
+            
+        year = str(paper.get('Year', '0000'))
+        base = f"{first_auth} - {year} - {title}"
+        
+    elif format_option == "Year - Journal - Title":
+        year = str(paper.get('Year', '0000'))
+        journal = paper.get('Journal', 'Journal')
+        if not journal or str(journal) == 'nan': journal = "Journal"
+        journal = sanitize_filename(journal)
+        base = f"{year} - {journal} - {title}"
+    else:
+        base = title
+        
+    # Truncate to avoid OS errors (255 max, keeping extension room)
+    if len(base) > 240:
+        base = base[:240]
+        
+    return base + ".pdf"
+
 def get_filename_from_cd(cd):
     """Get filename from content-disposition header."""
     if not cd:
@@ -650,7 +693,7 @@ def download_file(url, local_path):
             
     return False
 
-def download_library(limit=None, sort_by="Most Relevant", **kwargs):
+def download_library(limit=None, sort_by="Most Relevant", filename_format="Title", **kwargs):
     print("=== Phase 4: The Physical Librarian (V9: Robust) ===")
     
     csv_path = "research_catalog_categorized.csv"
@@ -725,8 +768,8 @@ def download_library(limit=None, sort_by="Most Relevant", **kwargs):
         if not os.path.exists(dest_folder):
             os.makedirs(dest_folder, exist_ok=True)
             
-        safe_title = sanitize_filename(title)[:50].replace(' ', '_')
-        filename = f"{safe_title}.pdf"
+        # Use new custom filename generator
+        filename = generate_filename(row, format_option=filename_format)
         local_path = os.path.join(dest_folder, filename)
         
         url = row.get('Source_URL')
@@ -885,7 +928,7 @@ def download_library(limit=None, sort_by="Most Relevant", **kwargs):
             'doi': row.get('DOI', ''),
             'url': row.get('Source_URL', ''),
             'pdf_url': row.get('Source_URL', '') if str(row.get('Source_URL', '')).endswith('.pdf') else '', # Rough guess
-            'abstract': row.get('Description', ''),
+            'abstract': str(row.get('Description', '')) if pd.notna(row.get('Description', '')) else '',
             'citation_count': row.get('Citation_Count', 0),
             'filename': row.get('Original_Filename', ''),
             'category': row.get('Category', 'Uncategorized'),
@@ -936,6 +979,7 @@ if __name__ == "__main__":
     parser.add_argument("--keywords", type=str, default="", help="Keywords used")
     parser.add_argument("--date_start", type=str, default="", help="Start Year")
     parser.add_argument("--date_end", type=str, default="", help="End Year")
+    parser.add_argument("--filename_format", type=str, default="Title", help="PDF Filename Format")
     
     args = parser.parse_args()
     
@@ -948,6 +992,7 @@ if __name__ == "__main__":
     download_library(
         limit=args.limit, 
         sort_by=args.sort, 
+        filename_format=args.filename_format,
         keywords=args.keywords, 
         date_range=d_range
     )

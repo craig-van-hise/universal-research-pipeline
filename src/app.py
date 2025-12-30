@@ -396,6 +396,14 @@ with st.sidebar:
     auto_folders = col_org1.checkbox("Enable AI Auto-Categorization", value=auto_saved, help="Use LLM to sort papers into sub-folders.")
     use_keywords_subfolders = col_org2.checkbox("Use Keywords as Sub-folders", value=key_sub_saved, help="Create a parent folder for each Search Term/Keyword.")
     
+    filename_format_saved = get_setting('filename_format', "Title")
+    filename_format = st.selectbox(
+        "PDF Filename Format",
+        options=["Title", "Author - Year - Title", "Year - Journal - Title"],
+        index=["Title", "Author - Year - Title", "Year - Journal - Title"].index(filename_format_saved) if filename_format_saved in ["Title", "Author - Year - Title", "Year - Journal - Title"] else 0,
+        help="Choose how downloaded PDF files should be named."
+    )
+    
     st.divider()
     
     # Removed Settings Section as requested
@@ -432,6 +440,7 @@ if start_btn:
             "sort_method": sort_method,
             "auto_folders": auto_folders,
             "use_keywords_subfolders": use_keywords_subfolders,
+            "filename_format": filename_format,
             "use_start_date": use_start_date,
             "use_end_date": use_end_date,
             "date_start": d_start_val,
@@ -466,7 +475,8 @@ if start_btn:
                 sort_method=sort_method,
                 google_api_key=api_key_to_use,
                 auto_folders=auto_folders,
-                use_keywords=use_keywords_subfolders
+                use_keywords=use_keywords_subfolders,
+                filename_format=filename_format
             )
             
             final_zip_path = None

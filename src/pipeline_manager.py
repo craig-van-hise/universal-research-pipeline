@@ -7,7 +7,7 @@ import shutil
 def run_full_pipeline(topic, keywords=None, author=None, publication=None, 
                       date_start=None, date_end=None, sites=None, count=10, 
                       sort_method="Most Relevant", google_api_key=None, keyword_logic='any',
-                      auto_folders=True, use_keywords=False):
+                      auto_folders=True, use_keywords=False, filename_format="Title"):
     """
     Orchestrates the full research pipeline in an isolated temporary directory.
     Yields log lines for real-time UI updates.
@@ -123,7 +123,8 @@ def run_full_pipeline(topic, keywords=None, author=None, publication=None,
         download_cmd = [
             sys.executable, script_3,
             "--limit", str(count),
-            "--sort", sort_method
+            "--sort", sort_method,
+            "--filename_format", filename_format
         ]
         
         # Pass metadata strings
