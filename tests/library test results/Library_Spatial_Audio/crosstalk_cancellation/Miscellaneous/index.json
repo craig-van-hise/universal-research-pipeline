@@ -1,0 +1,9 @@
+[
+  {
+    "Title": "Spatially Oriented Format for Acoustics 2.1: Introduction and Recent Advances",
+    "Authors": "Piotr Majdak, Franz Zotter, Fabian Brinkmann, Julien De Muynke, Michael Mihocic, Markus Noisternig",
+    "Filename": "Spatially Oriented Format for Acoustics 2.1 Introduction and Recent Advances.pdf",
+    "Description": "Spatially oriented acoustic data can range from a simple set of impulse responses, such as head-related transfer functions, to a large set of multiple-input multiple-output spatial room impulse responses obtained in complex measurements with a microphone array excited by a loudspeaker array at various conditions. The spatially oriented format for acoustics (SOFA), which was standardized by AES Standard 69, provides a format to store and share such data. SOFA takes into account geometric representations of many acoustic scenarios, data compression, network transfer, and a link to complex room geometries and aims at simplifying the development of interfaces for many programming languages. With the recent advancement of SOFA, the format offers new continuous-direction representation of data by means of spherical harmonics and novel conventions representing many measurement scenarios, such as source directivity and multiple-input multiple-output spatial room impulse responses. This article reviews SOFA by first providing an introduction to SOFA and then describing examples that demonstrate the most recent features of the SOFA 2.1 (AES Standard 69-2022).",
+    "Source_URL": "https://dael.euracoustics.org/confs/fa2023/data/articles/000729.pdf"
+  }
+]

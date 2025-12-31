@@ -1,0 +1,9 @@
+[
+  {
+    "Title": "Virtual Reality System with Integrated Sound Field Simulation and Reproduction",
+    "Authors": "Tobias Lentz, Dirk Schr\u00f6der, Michael Vorl\u00e4nder, Ingo Assenmacher",
+    "Filename": "Virtual Reality System with Integrated Sound Field Simulation and Reproduction.pdf",
+    "Description": "A real-time audio rendering system is introduced which combines a full room-specific simulation, dynamic crosstalk cancellation, and multitrack binaural synthesis for virtual acoustical imaging. The system is applicable for any room shape (normal, long, flat, coupled), independent of the a priori assumption of a diffuse sound field. This provides the possibility of simulating indoor or outdoor spatially distributed, freely movable sources and a moving listener in virtual environments. In addition to that, near-to-head sources can be simulated by using measured near-field HRTFs. The reproduction component consists of a headphone-free reproduction by dynamic crosstalk cancellation. The focus of the project is mainly on the integration and interaction of all involved subsystems. It is demonstrated that the system is capable of real-time room simulation and reproduction and, thus, can be used as a reliable platform for further research on VR applications.",
+    "Source_URL": "https://asp-eurasipjournals.springeropen.com/counter/pdf/10.1155/2007/70540"
+  }
+]

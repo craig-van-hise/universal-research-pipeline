@@ -323,7 +323,7 @@ def cluster_and_categorize(topic, sort_method="Most Relevant", limit=100, no_llm
     
     # Base Root (Topic Level)
     topic_sanitized = sanitize_folder_name(topic)
-    base_library_root = f"./Library/{topic_sanitized}"
+    base_library_root = os.path.join("./ScholarStack", topic_sanitized)
     
     categories_found = set()
     rows_to_drop = []

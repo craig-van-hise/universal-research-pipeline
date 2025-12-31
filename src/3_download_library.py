@@ -306,7 +306,7 @@ def download_library(limit=None, sort_by="Most Relevant", **kwargs):
     def process_paper_wrapper(args):
         index, row = args
         
-        target_dir = row['Directory_Path'] if pd.notna(row['Directory_Path']) else f"./Library/{sanitize_folder_name(current_topic)}"
+        target_dir = row['Directory_Path'] if pd.notna(row['Directory_Path']) else os.path.join("./ScholarStack", sanitize_folder_name(current_topic))
         os.makedirs(target_dir, exist_ok=True)
         
         success, final_url, fname, paywalled = False, None, None, False
@@ -863,7 +863,7 @@ def download_library(limit=None, sort_by="Most Relevant", filename_format="Title
 
     # 2. Cleanup Empty Folders
     topic_sanitized = sanitize_folder_name(current_topic)
-    topic_root = os.path.join("./Library", topic_sanitized)
+    topic_root = os.path.join("./ScholarStack", topic_sanitized)
 
     print("Cleaning up target folders...")
     # 1. Clean Leaf Folders (Categories)
@@ -892,7 +892,7 @@ def download_library(limit=None, sort_by="Most Relevant", filename_format="Title
                      print(f"Removed empty folder: {os.path.basename(root)}")
                 except: pass
 
-    zip_name = f"Library_{topic_sanitized}"
+    zip_name = f"ScholarStack_{topic_sanitized}"
     
     # 3. Standardize Metadata & Generate Catalogs
     print("Standardizing metadata and generating catalogs...")
@@ -959,10 +959,14 @@ def download_library(limit=None, sort_by="Most Relevant", filename_format="Title
         # D. BibTeX (PRP #11)
         create_bibtex_catalog(standardized_papers, cat_base + ".bib")
 
-    # 4. Zip
+    # 4. Zip - Create archive with ScholarStack/Topic structure
+    scholarstack_root = "./ScholarStack"
     if os.path.exists(topic_root):
-        shutil.make_archive(zip_name, 'zip', topic_root)
+        # Zip the entire ScholarStack folder to preserve the directory structure
+        shutil.make_archive(zip_name, 'zip', scholarstack_root)
         print(f"READY FOR DOWNLOAD: {zip_name}.zip")
+    else:
+        print(f"ERROR: Folder does not exist: {topic_root}")
     
     df.to_csv("final_library_catalog.csv", index=False)
     

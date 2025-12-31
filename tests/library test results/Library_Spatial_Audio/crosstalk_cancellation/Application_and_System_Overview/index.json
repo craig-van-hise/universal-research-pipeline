@@ -1,0 +1,30 @@
+[
+  {
+    "Title": "Spatial Audio for Soundscape Design: Recording and Reproduction",
+    "Authors": "Joo Young Hong, Jianjun He, Bhan Lam, Rishabh Gupta, Woon\u2010Seng Gan",
+    "Filename": "Spatial Audio for Soundscape Design Recording and Reproduction.pdf",
+    "Description": "With the advancement of spatial audio technologies, in both recording and reproduction, we are seeing more applications that incorporate 3D sound to create an immersive aural experience. Soundscape design and evaluation for urban planning can now tap into the extensive spatial audio tools for sound capture and 3D sound rendering over headphones and speaker arrays. In this paper, we outline a list of available state-of-the-art spatial audio recording techniques and devices, spatial audio physical and perceptual reproduction techniques, emerging spatial audio techniques for virtual and augmented reality, followed by a discussion on the degree of perceptual accuracy of recording and reproduction techniques in representing the acoustic environment.",
+    "Source_URL": "https://www.mdpi.com/2076-3417/7/6/627/pdf?version=1497700319"
+  },
+  {
+    "Title": "Project starline",
+    "Authors": "Jason Lawrence, Danb Goldman, Supreeth Achar, Gregory Major Blascovich, Joseph G. Desloge, Tommy Fortes, Eric M. Gomez, Sascha H\u00e4berling, Hugues Hoppe, Andy Huibers, Claude Knaus, Brian Kuschak, Ricardo Martin-Brualla, Harris Nover, Andrew Ian Russell, Steven M. Seitz, Kevin Tong",
+    "Filename": "Project starline.pdf",
+    "Description": "We present a real-time bidirectional communication system that lets two people, separated by distance, experience a face-to-face conversation as if they were copresent. It is the first telepresence system that is demonstrably better than 2D videoconferencing, as measured using participant ratings (e.g., presence, attentiveness, reaction-gauging, engagement), meeting recall, and observed nonverbal behaviors (e.g., head nods, eyebrow movements). This milestone is reached by maximizing audiovisual fidelity and the sense of copresence in all design elements, including physical layout, lighting, face tracking, multi-view capture, microphone array, multi-stream compression, loudspeaker output, and lenticular display. Our system achieves key 3D audiovisual cues (stereopsis, motion parallax, and spatialized audio) and enables the full range of communication cues (eye contact, hand gestures, and body language), yet does not require special glasses or body-worn microphones/headphones. The system consists of a head-tracked autostereoscopic display, high-resolution 3D capture and rendering subsystems, and network transmission using compressed color and depth video streams. Other contributions include a novel image-based geometry fusion algorithm, free-space dereverberation, and talker localization.",
+    "Source_URL": "https://hhoppe.com/starline.pdf"
+  },
+  {
+    "Title": "Clean Audio for TV broadcast: An Object-Based Approach for Hearing-Impaired Viewers",
+    "Authors": "Ben Shirley, Rob Oldfield",
+    "Filename": "Clean Audio for TV broadcast An Object-Based Approach for Hearing-Impaired Viewers.pdf",
+    "Description": "As the percentage of the population with hearing loss increases, broadcasters are receiving more complaints about the difficulty in understanding dialog in the presence of background sound and music. This article explores these issues, reviews previously proposed solutions, and presents an object-based approach that can be implemented within MPEG-H to give listeners control of their audio mix. An object-based approach to clean audio, combined with methods to isolate sounds that are important to the narrative and meaning of a broadcast has the potential to enable users to have complete control of the relative levels of all aspects of audio from TV broadcast. This approach was demonstrated at the University of Salford campus in 2013.",
+    "Source_URL": "http://downloads.bbc.co.uk/rd/pubs/whp/whp-pdf-files/WHP324.pdf"
+  },
+  {
+    "Title": "Recent Advances in an Open Software for Numerical HRTF Calculation",
+    "Authors": "Fabian Brinkmann, W. Kreuzer, Jeffrey Thomsen, Sergejs Dombrovskis, Katharina Pollack, Stefan Weinzierl, Piotr Majdak",
+    "Filename": "Recent Advances in an Open Software for Numerical HRTF Calculation.pdf",
+    "Description": "Mesh2HRTF 1.x is an open-source and fully scriptable end-to-end pipeline for the numerical calculation of head-related transfer functions (HRTFs). The calculations are based on 3D meshes of listener\u2019s body parts such as the head, pinna, and torso. The numerical core of Mesh2HRTF is written in C++ and employs the boundary-element method for solving the Helmholtz equation. It is accelerated by a multilevel fast multipole method and can easily be parallelized to further speed up the computations. The recently refactored framework of Mesh2HRTF 1.x contains tools for preparing the meshes as well as specific post-processing and inspection of the calculatedHRTFs. The resultingHRTFs are saved in the spatially oriented format for acoustics being directly applicable in virtual and augmented reality applications and psychoacoustic research. The Mesh2HRTF 1.x code is automatically tested to assure high quality and reliability. A comprehensive online documentation enables easy access for users without in-depth knowledge of acoustic simulations.",
+    "Source_URL": "https://projects.ari.oeaw.ac.at/research/Publications/Articles/2023/Brinkmann_et_al_2023_Mesh2HRTF.pdf"
+  }
+]

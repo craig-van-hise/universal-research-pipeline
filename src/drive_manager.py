@@ -36,26 +36,55 @@ class DriveManager:
             return items[0]['id']
 
     def upload_library(self, local_library_path):
-        """Recursively uploads PDF files from the local library path to Drive."""
+        """Recursively uploads files from the local library path to Drive."""
         if not self.service:
              raise ValueError("Drive Service not initialized. User not logged in.")
             
-        root_folder_id = self.get_or_create_folder('_Research_Assistant_Imports')
+        root_folder_id = self.get_or_create_folder('ScholarStack')
         print(f"Target Drive Folder ID: {root_folder_id}")
         
         uploaded_count = 0
         
+        # File types to upload
+        allowed_extensions = {'.pdf', '.md', '.csv', '.ris', '.bib'}
+        
+        # MIME type mapping
+        mime_types = {
+            '.pdf': 'application/pdf',
+            '.md': 'text/markdown',
+            '.csv': 'text/csv',
+            '.ris': 'application/x-research-info-systems',
+            '.bib': 'application/x-bibtex'
+        }
+        
         # Walk through the local directory
         for root, dirs, files in os.walk(local_library_path):
             for filename in files:
-                if filename.lower().endswith('.pdf'):
+                # Skip hidden files
+                if filename.startswith('.'):
+                    continue
+                    
+                file_ext = os.path.splitext(filename)[1].lower()
+                
+                if file_ext in allowed_extensions:
                     file_path = os.path.join(root, filename)
+                    
+                    # Preserve folder structure relative to library root
+                    rel_path = os.path.relpath(root, local_library_path)
+                    
+                    # Create subfolder if needed
+                    if rel_path != '.':
+                        parent_folder_id = self.get_or_create_folder(rel_path)
+                    else:
+                        parent_folder_id = root_folder_id
                     
                     file_metadata = {
                         'name': filename,
-                        'parents': [root_folder_id]
+                        'parents': [parent_folder_id]
                     }
-                    media = MediaFileUpload(file_path, mimetype='application/pdf')
+                    
+                    mime_type = mime_types.get(file_ext, 'application/octet-stream')
+                    media = MediaFileUpload(file_path, mimetype=mime_type)
                     
                     try:
                         self.service.files().create(
@@ -64,6 +93,7 @@ class DriveManager:
                             fields='id'
                         ).execute()
                         uploaded_count += 1
+                        print(f"✓ Uploaded: {filename}")
                     except Exception as e:
                         print(f"Failed to upload {filename}: {e}")
                         

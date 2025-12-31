@@ -140,7 +140,7 @@ cython_debug/
 *.swp
 
 # ScholarStack Artifacts
-Library/
+ScholarStack/
 *.zip
 *.pdf
 *.csv

@@ -1,0 +1,9 @@
+[
+  {
+    "Title": "Solution Strategies for Linear Inverse Problems in Spatial Audio Signal Processing",
+    "Authors": "Mingsian R. Bai, Chun Hui Chung, Po-Chen Wu, Yi-Hao Chiang, Chun-May Yang",
+    "Filename": "Solution Strategies for Linear Inverse Problems in Spatial Audio Signal Processing.pdf",
+    "Description": "The aim of this study was to compare algorithms for solving inverse problems generally encountered in spatial audio signal processing. Tikhonov regularization is typically utilized to solve overdetermined linear systems in which the regularization parameter is selected by the golden section search (GSS) algorithm. For underdetermined problems with sparse solutions, several iterative compressive sampling (CS) methods are suggested as alternatives to traditional convex optimization (CVX) methods that are computationally expensive. The focal underdetermined system solver (FOCUSS), the steepest descent (SD) method, Newton\u2019s (NT) method, and the conjugate gradient (CG) method were developed to solve CS problems more efficiently in this study. These algorithms were compared in terms of problems, including source localization and separation, noise source identification, and analysis and synthesis of sound fields, by using a uniform linear array (ULA), a uniform circular array (UCA), and a random array. The derived results are discussed herein and guidelines for the application of these algorithms are summarized.",
+    "Source_URL": "https://www.mdpi.com/2076-3417/7/6/582/pdf?version=1496711486"
+  }
+]

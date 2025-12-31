@@ -162,7 +162,7 @@ def run_full_pipeline(topic, keywords=None, author=None, publication=None,
 
         # --- Validate Output ---
         # Find the zip file in the temp dir
-        # The script creates "Library_{SanitizedTopic}.zip"
+        # The script creates "ScholarStack_{SanitizedTopic}.zip"
         # We don't know the exact sanitization logic of the script perfectly here,
         # so we look for any .zip file.
         

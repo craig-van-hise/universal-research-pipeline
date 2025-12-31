@@ -1,0 +1,9 @@
+[
+  {
+    "Title": "Acoustic contrast, planarity and robustness of sound zone methods using a circular loudspeaker array",
+    "Authors": "Peter John Cusack Coleman, Philip J. B. Jackson, Marek Olik, Martin Bo M\u00f8ller, Martin Olsen, Jan Abildgaard Pedersen",
+    "Filename": "Acoustic contrast, planarity and robustness of sound zone methods using a circular loudspeaker array.pdf",
+    "Description": "Since the mid 1990s, acoustics research has been undertaken relating to the sound zone problem\u2014using loudspeakers to deliver a region of high sound pressure while simultaneously creating an area where the sound is suppressed\u2014in order to facilitate independent listening within the same acoustic enclosure. The published solutions to the sound zone problem are derived from areas such as wave field synthesis and beamforming. However, the properties of such methods differ and performance tends to be compared against similar approaches. In this study, the suitability of energy focusing, energy cancelation, and synthesis approaches for sound zone reproduction is investigated. Anechoic simulations based on two zones surrounded by a circular array show each of the methods to have a characteristic performance, quantified in terms of acoustic contrast, array control effort and target sound field planarity. Regularization is shown to have a significant effect on the array effort and achieved acoustic contrast, particularly when mismatched conditions are considered between calculation of the source weights and their application to the system.",
+    "Source_URL": "https://pdfs.semanticscholar.org/30e5/4f0f268e910d4c01baf1b2b9607576b0ad97.pdf"
+  }
+]

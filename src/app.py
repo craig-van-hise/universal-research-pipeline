@@ -56,20 +56,47 @@ def render_visualizations(csv_path):
             # Clean Year data
             def clean_year(y):
                 try:
-                    if pd.isna(y) or str(y).lower() in ['nan', 'none', '']: return "Unknown"
-                    return str(int(float(str(y).split('-')[0])))
+                    if pd.isna(y) or str(y).lower() in ['nan', 'none', '']: return None
+                    return int(float(str(y).split('-')[0]))
                 except:
-                    return "Unknown"
+                    return None
                     
             df['Year_Clean'] = df['Year'].apply(clean_year)
-            year_counts = df['Year_Clean'].value_counts().sort_index()
             
-            # Rename for tooltip cleanliness
-            timeline_data = pd.DataFrame({"Year": year_counts.index, "Count": year_counts.values}).set_index("Year")
+            # Remove None/Unknown years for proper timeline
+            valid_years = df[df['Year_Clean'].notna()]['Year_Clean']
             
-            st.subheader("Research Timeline")
-            st.bar_chart(timeline_data)
-            st.divider()
+            if len(valid_years) > 0:
+                # Get year range
+                min_year = int(valid_years.min())
+                max_year = int(valid_years.max())
+                
+                # Create complete year range
+                all_years = pd.DataFrame({'Year': range(min_year, max_year + 1)})
+                
+                # Count papers per year
+                year_counts = df[df['Year_Clean'].notna()].groupby('Year_Clean').size().reset_index(name='Count')
+                year_counts['Year'] = year_counts['Year_Clean'].astype(int)
+                
+                # Merge to fill missing years with 0
+                timeline_data = all_years.merge(year_counts[['Year', 'Count']], on='Year', how='left').fillna(0)
+                timeline_data['Count'] = timeline_data['Count'].astype(int)
+                
+                st.subheader("Research Timeline")
+                
+                # Use Altair for proper time axis
+                timeline_chart = alt.Chart(timeline_data).mark_bar().encode(
+                    x=alt.X('Year:Q', axis=alt.Axis(format='d', title='Year'), scale=alt.Scale(domain=[min_year, max_year])),
+                    y=alt.Y('Count:Q', title='Number of Papers'),
+                    tooltip=[alt.Tooltip('Year:Q', format='d'), 'Count:Q']
+                ).properties(
+                    height=300
+                ).configure_view(
+                    strokeWidth=0  # Disable scroll-zoom
+                )
+                
+                st.altair_chart(timeline_chart, use_container_width=True)
+                st.divider()
 
         # --- 2. Impact Analysis (Citation Counts) ---
         print(f"DEBUG: Checking for Citation_Count. Columns: {df.columns}")
@@ -91,7 +118,9 @@ def render_visualizations(csv_path):
                 x=alt.X('Title', sort=None, axis=alt.Axis(labels=False, title="Paper Title")),
                 y=alt.Y('Citation_Count', title="Citations"),
                 tooltip=['Title', 'Authors', 'Citation_Count']
-            ).interactive()
+            ).configure_view(
+                strokeWidth=0  # Disable scroll-zoom
+            )
             
             st.altair_chart(c, use_container_width=True)
             st.divider()
@@ -269,37 +298,44 @@ if st.session_state.user_info:
     name = user.get('name', 'User')
     picture = user.get('picture', '')
     
-    col1, col2 = st.columns([4, 1])
-    with col1:
-        st.markdown(f"""
+    # Profile and sign-out in top right
+    st.markdown(f"""
+    <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 10px; padding: 10px;">
         <div class="user-profile">
             <img src="{picture}" class="user-avatar" onerror="this.style.display='none'">
             <span>{name}</span>
         </div>
-        """, unsafe_allow_html=True)
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Sign-out button aligned to right
+    col1, col2 = st.columns([3, 1])
     with col2:
-        if st.button("Sign Out", key="signout_btn"):
+        if st.button("Sign Out", key="signout_btn", use_container_width=True):
             st.session_state.credentials = None
             st.session_state.user_info = None
             st.rerun()
 else:
-    login_url = get_login_url()
-    if login_url:
-        st.markdown(f"""
-        <a href="{login_url}" target="_self">
-            <button style="position: fixed; top: 60px; right: 20px; z-index: 999; background-color: white; border: 1px solid #dadce0; color: #3c4043; padding: 8px 16px; border-radius: 4px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px;">
-                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18">
-                Sign in with Google
+    # Sign-in button in top right
+    col1, col2 = st.columns([3, 1])
+    with col2:
+        login_url = get_login_url()
+        if login_url:
+            st.markdown(f"""
+            <a href="{login_url}" target="_self">
+                <button style="background-color: white; border: 1px solid #dadce0; color: #3c4043; padding: 8px 16px; border-radius: 4px; font-weight: 500; cursor: pointer; display: flex; align-items: center; gap: 8px; width: 100%;">
+                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18">
+                    Sign in with Google
+                </button>
+            </a>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <button style="background-color: #f1f3f4; border: 1px solid #dadce0; color: #9aa0a6; padding: 8px 16px; border-radius: 4px; font-weight: 500; cursor: not-allowed; display: flex; align-items: center; gap: 8px; width: 100%;" title="Upload client_secrets.json to enable">
+                <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" style="opacity: 0.5;">
+                Sign in with Google (Disabled)
             </button>
-        </a>
-        """, unsafe_allow_html=True)
-    else:
-        st.markdown(f"""
-        <button style="position: fixed; top: 60px; right: 20px; z-index: 999; background-color: #f1f3f4; border: 1px solid #dadce0; color: #9aa0a6; padding: 8px 16px; border-radius: 4px; font-weight: 500; cursor: not-allowed; display: flex; align-items: center; gap: 8px;" title="Upload client_secrets.json to enable">
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width="18" style="opacity: 0.5;">
-            Sign in with Google (Disabled)
-        </button>
-        """, unsafe_allow_html=True)
+            """, unsafe_allow_html=True)
 
 # Initialize Session State
 if 'pipeline_run' not in st.session_state:
@@ -334,7 +370,7 @@ if st.session_state.pipeline_run and st.session_state.zip_path and os.path.exist
                 if not st.session_state.credentials:
                     st.error("Please Sign In (top right) to use Google Drive.")
                 elif st.session_state.temp_dir:
-                    lib_path = os.path.join(st.session_state.temp_dir, "Library")
+                    lib_path = os.path.join(st.session_state.temp_dir, "ScholarStack")
                     if os.path.exists(lib_path):
                         with st.spinner("Uploading..."):
                             try:
@@ -344,7 +380,7 @@ if st.session_state.pipeline_run and st.session_state.zip_path and os.path.exist
                             except Exception as e:
                                 st.error(f"Drive Error: {e}")
                     else:
-                        st.error("Library folder not found.")
+                        st.error("ScholarStack folder not found.")
                 else:
                     st.error("Session expired.")
     st.divider()
@@ -359,13 +395,17 @@ if st.session_state.pipeline_run and st.session_state.zip_path and os.path.exist
 
 # --- Sidebar ---
 with st.sidebar:
+    # Mission button at top
+    start_btn = st.button("🚀 Start Research Mission", type="primary", use_container_width=True)
+    st.divider()
+    
+    # Grouped: History and Alerts
     if st.button("📜 View Search History", use_container_width=True):
         st.session_state.history_open = True
         st.rerun()
         
     if st.session_state.get('history_open', False):
         search_history_modal()
-    st.divider()
     
     # --- Alert Management ---
     with st.expander("📬 Manage Alerts"):
@@ -409,7 +449,7 @@ with st.sidebar:
                 st.error("Please enter a valid email address")
             else:
                 # Get current search parameters
-                current_topic = st.session_state.get('topic_input', '')
+                current_topic = st.session_state.get('topic_input_std', '')
                 current_keywords = st.session_state.get('keywords_input_std', '')
                 
                 if not current_topic and not current_keywords:
@@ -434,45 +474,51 @@ with st.sidebar:
             st.info("No alerts saved yet")
         else:
             for sub in subscriptions:
-                col1, col2, col3 = st.columns([3, 1, 1])
+                # Compact display with icons
+                status_icon = "✅" if sub['active'] else "⏸️"
+                freq_label = {
+                    "hourly": "⚡",
+                    "daily": "📅",
+                    "weekly": "📆",
+                    "biweekly": "📆",
+                    "monthly": "📆"
+                }.get(sub.get('frequency', 'daily'), "📅")
                 
+                # Parse query to show topic prominently
+                query = sub['search_query']
+                if ' + ' in query:
+                    parts = query.split(' + ', 1)
+                    topic = parts[0]
+                    keywords = parts[1] if len(parts) > 1 else ""
+                    display_query = f"**{topic}**"
+                    if keywords:
+                        display_query += f" + {keywords}"
+                else:
+                    display_query = f"**{query}**"
+                
+                # Query display
+                st.markdown(f"{status_icon} {freq_label} {display_query}")
+                st.caption(f"📧 {sub['user_email']}")
+                
+                # Action buttons in single row
+                col1, col2 = st.columns(2)
                 with col1:
-                    status_icon = "✅" if sub['active'] else "⏸️"
-                    freq_label = {
-                        "hourly": "⚡",
-                        "daily": "📅",
-                        "weekly": "📆",
-                        "biweekly": "📆",
-                        "monthly": "📆"
-                    }.get(sub.get('frequency', 'daily'), "📅")
-                    st.write(f"{status_icon} {freq_label} **{sub['search_query']}**")
-                    st.caption(f"To: {sub['user_email']}")
+                    btn_icon = "⏸️" if sub['active'] else "▶️"
+                    btn_label = f"{btn_icon}"
+                    if st.button(btn_label, key=f"toggle_{sub['id']}", use_container_width=True, help="Pause" if sub['active'] else "Resume"):
+                        alerts_db.toggle_subscription(sub['id'], not sub['active'])
+                        st.rerun()
                 
                 with col2:
-                    new_state = not sub['active']
-                    btn_label = "Pause" if sub['active'] else "Resume"
-                    if st.button(btn_label, key=f"toggle_{sub['id']}", use_container_width=True):
-                        alerts_db.toggle_subscription(sub['id'], new_state)
-                        st.rerun()
-                
-                with col3:
-                    if st.button("🗑️", key=f"delete_{sub['id']}", use_container_width=True):
+                    if st.button("🗑️", key=f"delete_{sub['id']}", use_container_width=True, help="Delete"):
                         alerts_db.delete_subscription(sub['id'])
                         st.rerun()
+                
+                st.divider()
     
     st.divider()
 
     st.header("Research Parameters")
-    
-    if st.session_state.recent_topics:
-        st.write("Recent Topics:")
-        cols = st.columns(len(st.session_state.recent_topics))
-        for i, t in enumerate(st.session_state.recent_topics):
-            if st.button(t, key=f"topic_btn_{i}"):
-                st.session_state.selected_topic = t
-        if st.button("Clear History", type="secondary"):
-            st.session_state.recent_topics = []
-            st.rerun()
 
     # --- Load Settings ---
     saved = load_settings()    
@@ -580,8 +626,6 @@ with st.sidebar:
     
     # Removed Settings Section as requested
     user_api_key = os.getenv("GOOGLE_API_KEY")
-    
-    start_btn = st.button("🚀 Start Research Mission", type="primary")
 
 # --- Execution ---
 if start_btn:

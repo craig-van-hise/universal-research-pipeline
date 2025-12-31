@@ -1,0 +1,9 @@
+[
+  {
+    "Title": "Binaural Ambisonics: Its optimization and applications for auralization",
+    "Authors": "Makoto Otani, Haruki Shigetani, Masataka Mitsuishi, Ryo Matsuda",
+    "Filename": "Binaural Ambisonics Its optimization and applications for auralization.pdf",
+    "Description": "To better understand acoustic environment and the resulting auditory perception, it is essential to capture, analyze, and reproduce a sound field as a three-dimensional physical phenomenon because spatial aspects of auditory perception play important roles in various situations in our lives. Some approaches have been proposed to achieve the three-dimensional capture and reproduction of acoustic fields. Among them, Higher-Order Ambisonics (HOA) based on spherical harmonics expansion enables the capture and reproduction of a directivity pattern of incoming sound waves. On the basis of HOA, three-dimensional auditory space can be presented to a listener typically via a spherical loudspeaker array. In addition, binaural synthesis emulating the loudspeaker presentation enables HOA reproduction with a set of headphones or several loudspeakers by employing crosstalk cancellation. Thus, we are developing an HOA-based binaural reproduction/auralization system with head tracking. This system is aimed at realizing the reproduction and auralization of a sound field, including one excited by the listener's own voice. In this paper, we review the topics related to the reproduction and auralization of the sound field and introduce the HOA-based binaural synthesis system we have developed, as well as our works on sweet-spot expansion in HOA decoding and self-voice reproduction/auralization.",
+    "Source_URL": "https://www.jstage.jst.go.jp/article/ast/41/1/41_E19229/_pdf"
+  }
+]
