@@ -151,3 +151,7 @@ list_models.py
 test_quota.py
 test_crawler_logic.py
 unpaywall_cache/
+
+# OAuth & Security - NEVER COMMIT THESE
+client_secrets.json
+data/alerts.db

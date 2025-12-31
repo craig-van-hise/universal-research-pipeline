@@ -149,10 +149,19 @@ def check_alerts(test_mode=False):
         email = sub['user_email']
         query = sub['search_query']
         source = sub['search_source']
+        frequency = sub.get('frequency', 'daily')
         last_run = sub['last_run']
         
         print(f"🔎 Checking: '{query}' for {email}")
+        print(f"   Frequency: {frequency}")
         print(f"   Last checked: {last_run}")
+        
+        # Check if alert should run based on frequency
+        from alert_scheduler import should_run_alert
+        
+        if not should_run_alert(str(last_run), frequency):
+            print(f"   ⏭️  Skipping (not time yet based on {frequency} schedule)\n")
+            continue
         
         # TODO: Implement actual search logic using src/1_search_omni.py
         # For now, we'll simulate finding papers

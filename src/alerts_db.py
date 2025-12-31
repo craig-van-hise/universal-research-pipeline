@@ -18,6 +18,7 @@ def init_db():
             user_email TEXT NOT NULL,
             search_query TEXT NOT NULL,
             search_source TEXT NOT NULL,
+            frequency TEXT DEFAULT 'daily',
             last_run TIMESTAMP,
             active BOOLEAN DEFAULT 1,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -28,15 +29,15 @@ def init_db():
     conn.close()
     print(f"✅ Database initialized at {DB_PATH}")
 
-def add_subscription(email: str, query: str, source: str) -> int:
+def add_subscription(email: str, query: str, source: str, frequency: str = "daily") -> int:
     """Add a new alert subscription."""
     conn = sqlite3.connect(DB_PATH)
     cursor = conn.cursor()
     
     cursor.execute("""
-        INSERT INTO subscriptions (user_email, search_query, search_source, last_run)
-        VALUES (?, ?, ?, ?)
-    """, (email, query, source, datetime.now()))
+        INSERT INTO subscriptions (user_email, search_query, search_source, frequency, last_run)
+        VALUES (?, ?, ?, ?, ?)
+    """, (email, query, source, frequency, datetime.now()))
     
     subscription_id = cursor.lastrowid
     conn.commit()

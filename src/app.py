@@ -268,12 +268,20 @@ if st.session_state.user_info:
     user = st.session_state.user_info
     name = user.get('name', 'User')
     picture = user.get('picture', '')
-    st.markdown(f"""
-    <div class="user-profile">
-        <img src="{picture}" class="user-avatar" onerror="this.style.display='none'">
-        <span>{name}</span>
-    </div>
-    """, unsafe_allow_html=True)
+    
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.markdown(f"""
+        <div class="user-profile">
+            <img src="{picture}" class="user-avatar" onerror="this.style.display='none'">
+            <span>{name}</span>
+        </div>
+        """, unsafe_allow_html=True)
+    with col2:
+        if st.button("Sign Out", key="signout_btn"):
+            st.session_state.credentials = None
+            st.session_state.user_info = None
+            st.rerun()
 else:
     login_url = get_login_url()
     if login_url:
@@ -366,10 +374,34 @@ with st.sidebar:
         # Initialize alerts database
         alerts_db.init_db()
         
+        # Auto-fill email if user is signed in
+        default_email = ""
+        email_disabled = False
+        if st.session_state.user_info:
+            default_email = st.session_state.user_info.get('email', '')
+            email_disabled = True
+        
         alert_email = st.text_input(
             "Email for notifications",
-            placeholder="your.email@gmail.com",
-            key="alert_email_input"
+            value=default_email,
+            placeholder="your.email@gmail.com" if not default_email else "",
+            disabled=email_disabled,
+            key="alert_email_input",
+            help="Sign in with Google to auto-fill" if not default_email else "Using your Google account email"
+        )
+        
+        alert_frequency = st.selectbox(
+            "Check frequency",
+            options=["hourly", "daily", "weekly", "biweekly", "monthly"],
+            format_func=lambda x: {
+                "hourly": "⚡ Hourly (every hour)",
+                "daily": "📅 Daily (once per day)",
+                "weekly": "📆 Weekly (every Monday)",
+                "biweekly": "📆 Bi-weekly (every 2 weeks)",
+                "monthly": "📆 Monthly (once per month)"
+            }[x],
+            index=1,  # Default to daily
+            key="alert_frequency_input"
         )
         
         if st.button("💾 Save Current Search as Alert", use_container_width=True):
@@ -387,7 +419,8 @@ with st.sidebar:
                     sub_id = alerts_db.add_subscription(
                         email=alert_email,
                         query=query,
-                        source="OpenAlex"
+                        source="OpenAlex",
+                        frequency=alert_frequency
                     )
                     st.success(f"✅ Alert saved! (ID: {sub_id})")
                     st.rerun()
@@ -405,7 +438,14 @@ with st.sidebar:
                 
                 with col1:
                     status_icon = "✅" if sub['active'] else "⏸️"
-                    st.write(f"{status_icon} **{sub['search_query']}**")
+                    freq_label = {
+                        "hourly": "⚡",
+                        "daily": "📅",
+                        "weekly": "📆",
+                        "biweekly": "📆",
+                        "monthly": "📆"
+                    }.get(sub.get('frequency', 'daily'), "📅")
+                    st.write(f"{status_icon} {freq_label} **{sub['search_query']}**")
                     st.caption(f"To: {sub['user_email']}")
                 
                 with col2:
