@@ -110,20 +110,26 @@ def render_visualizations(csv_path):
             cit_df['Citation_Count'] = pd.to_numeric(cit_df['Citation_Count'], errors='coerce').fillna(0)
             cit_df['Authors'] = cit_df['Authors'].fillna("Unknown")
             
-            # Sort Layout: Low to High (Ascending)
-            cit_df = cit_df.sort_values(by='Citation_Count', ascending=True)
+            # Sort Layout: High to Low (Descending)
+            cit_df = cit_df.sort_values(by='Citation_Count', ascending=False)
             
-            st.subheader("Citation Impact (Low to High)")
+            st.subheader("Citation Impact (High to Low)")
+            
+            # Dynamic Width for Scrolling (20px per bar, min 600px)
+            chart_width = max(600, len(cit_df) * 20)
             
             c = alt.Chart(cit_df).mark_bar().encode(
                 x=alt.X('Title', sort=None, axis=alt.Axis(labels=False, title="Paper Title")),
                 y=alt.Y('Citation_Count', title="Citations"),
                 tooltip=['Title', 'Authors', 'Citation_Count']
+            ).properties(
+                width=chart_width
             ).configure_view(
-                strokeWidth=0  # Disable scroll-zoom
+                strokeWidth=0
             )
             
-            st.altair_chart(c, use_container_width=True)
+            # Use columns to allow overflow scrolling if needed, or just let streamlit handle wide charts
+            st.altair_chart(c, use_container_width=False)
             st.divider()
         
     except Exception as e:
@@ -669,11 +675,13 @@ with st.sidebar:
             d_end_val = st.date_input("To", value=d_end_saved, max_value=today) if use_end_date else None
             
             st.write("---")
-            all_sites = st.checkbox("Select All Sources", value=True)
+            # Removed "Select All" toggle. Defaulting to ALL sources.
             site_options = ["ArXiv", "Scholar", "Semantic Scholar", "CORE", "DOAJ"]
             site_map = {"ArXiv": "arxiv", "Scholar": "scholar", "Semantic Scholar": "semantic", "CORE": "core", "DOAJ": "doaj"}
-            selected_sites_labels = site_options if all_sites else [s for s in site_options if st.checkbox(s, value=True)]
-            selected_sites = [site_map[label] for label in selected_sites_labels]
+            
+            # Display active sources as info (read-only)
+            st.caption(f"Searching across: {', '.join(site_options)}")
+            selected_sites = [site_map[label] for label in site_options]
 
         count = st.number_input("Target Paper Count", min_value=1, max_value=1000, value=default_count)
         
@@ -778,76 +786,101 @@ if start_btn:
         save_history(current_settings)
         # -----------------------------
         
-        st.subheader("📡 Mission Control Log")
-        log_container = st.empty()
-        full_log = ""
-        status_box = st.status("Initializing Agent...", expanded=True)
-        
-        try:
-            status_box.write("🔍 Phase 1: Scouting Academic Sources...")
-            d_start_str = d_start_val.strftime("%Y-%m-%d") if d_start_val else None
-            d_end_str = d_end_val.strftime("%Y-%m-%d") if d_end_val else None
-
-            api_key_to_use = user_api_key if user_api_key else None
-
-            is_fast = "Fast" in research_mode 
-
-            pipeline_gen = run_full_pipeline(
-                topic=topic,
-                keywords=keywords,
-                keyword_logic=logic_val,
-                author=author,
-                publication=publication,
-                date_start=d_start_str,
-                date_end=d_end_str,
-                sites=selected_sites,
-                count=count,
-                sort_method=sort_method,
-                google_api_key=api_key_to_use,
-                auto_folders=auto_folders,
-                use_keywords=use_keywords_subfolders,
-                filename_format=filename_format,
-                is_fast_mode=is_fast
-            )
+        # --- Mission Execution UI ---
+        # Collapsible Status & Progress Tracking
+        with st.status("🚀 Mission in Progress...", expanded=True) as status_box:
+            st.write("Initializing Agent...")
+            progress_bar = st.progress(0)
+            log_container = st.empty()
+            full_log = ""
             
-            final_zip_path = None
-            temp_dir = None
-            
-            for line in pipeline_gen:
-                if isinstance(line, tuple):
-                    if line[0] == "RETURN_PATH": final_zip_path = line[1]
-                    elif line[0] == "TEMP_DIR": temp_dir = line[1]
-                    elif line[0] == "CATALOG_CSV":
-                        # Render visualizations immediately AND save for persistence
-                        render_visualizations(line[1])
-                        st.session_state.timeline_csv = line[1]
+            try:
+                d_start_str = d_start_val.strftime("%Y-%m-%d") if d_start_val else None
+                d_end_str = d_end_val.strftime("%Y-%m-%d") if d_end_val else None
+
+                api_key_to_use = user_api_key if user_api_key else None
+                is_fast = "Fast" in research_mode 
+
+                pipeline_gen = run_full_pipeline(
+                    topic=topic,
+                    keywords=keywords,
+                    keyword_logic=logic_val,
+                    author=author,
+                    publication=publication,
+                    date_start=d_start_str,
+                    date_end=d_end_str,
+                    sites=selected_sites,
+                    count=count,
+                    sort_method=sort_method,
+                    google_api_key=api_key_to_use,
+                    auto_folders=auto_folders,
+                    use_keywords=use_keywords_subfolders,
+                    filename_format=filename_format,
+                    is_fast_mode=is_fast
+                )
+                
+                final_zip_path = None
+                temp_dir = None
+                
+                # Progress Logic
+                phase_map = {
+                    "Phase 1": 10,
+                    "Phase 2": 40,
+                    "Phase 3": 70,
+                    "Phase 4": 90,
+                    "Mission Complete": 100
+                }
+                
+                for line in pipeline_gen:
+                    if isinstance(line, tuple):
+                        if line[0] == "RETURN_PATH": final_zip_path = line[1]
+                        elif line[0] == "TEMP_DIR": temp_dir = line[1]
+                        elif line[0] == "CATALOG_CSV":
+                            # Render visualizations immediately AND save for persistence
+                            render_visualizations(line[1])
+                            st.session_state.timeline_csv = line[1]
+                    else:
+                        full_log += line + "\n"
+                        log_container.code(full_log, language="bash")
+                        
+                        # Dynamic Progress Updates
+                        if "Phase 1" in line:
+                            status_box.update(label="Phase 1: Scouting Sources (OpenAlex)...", state="running")
+                            progress_bar.progress(10)
+                        elif "Phase 2" in line:
+                            status_box.update(label="Phase 2: AI Clustering & Organization...", state="running")
+                            progress_bar.progress(40)
+                        elif "Phase 3" in line:
+                             status_box.update(label="Phase 3: Refining Taxonomy...", state="running")
+                             progress_bar.progress(60)
+                        elif "Phase 4" in line:
+                            status_box.update(label="Phase 4: Downloading Papers...", state="running")
+                            progress_bar.progress(85)
+                
+                if final_zip_path and os.path.exists(final_zip_path):
+                    status_box.update(label="✅ Mission Complete!", state="complete", expanded=False)
+                    progress_bar.progress(100)
+                    st.session_state.pipeline_run = True
+                    st.session_state.zip_path = final_zip_path
+                    st.session_state.temp_dir = temp_dir
+                    st.session_state.temp_dir_to_cleanup = temp_dir
+                
+                    found_catalog = False
+                    for root, dirs, files in os.walk(temp_dir):
+                        for file in files:
+                            if file.endswith(".md") and "Catalog" in file:
+                                with open(os.path.join(root, file), "r", encoding="utf-8") as f:
+                                    st.session_state.catalog_content = f.read()
+                                found_catalog = True; break
+                        if found_catalog: break
+                    
+                    st.rerun()
                 else:
-                    full_log += line + "\n"
-                    log_container.code(full_log, language="bash")
-
-            if final_zip_path and os.path.exists(final_zip_path):
-                status_box.update(label="Mission Complete!", state="complete", expanded=False)
-                st.session_state.pipeline_run = True
-                st.session_state.zip_path = final_zip_path
-                st.session_state.temp_dir = temp_dir
-                st.session_state.temp_dir_to_cleanup = temp_dir
-                
-                found_catalog = False
-                for root, dirs, files in os.walk(temp_dir):
-                    for file in files:
-                        if file.endswith(".md") and "Catalog" in file:
-                            with open(os.path.join(root, file), "r", encoding="utf-8") as f:
-                                st.session_state.catalog_content = f.read()
-                            found_catalog = True; break
-                    if found_catalog: break
-                
-                st.rerun()
-            else:
-                status_box.update(label="Mission Failed", state="error")
-                st.error("Pipeline finished, but no output was generated.")
-        except Exception as e:
-            status_box.update(label="System Error", state="error")
-            st.error(f"An error occurred: {e}")
+                    status_box.update(label="Mission Failed", state="error")
+                    st.error("Pipeline finished, but no output was generated.")
+            except Exception as e:
+                status_box.update(label="System Error", state="error")
+                st.error(f"An error occurred: {e}")
 
 if not start_btn and not st.session_state.pipeline_run:
     st.info("👈 Use the sidebar to configure your research mission.")
